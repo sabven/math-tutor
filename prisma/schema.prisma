@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id           String   @id @default(cuid())
+  name         String
+  currentLevel Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  sessions     Session[]
+  skillScores  SkillScore[]
+  pointsLedger PointsLedger[]
+  redemptions  Redemption[]
+}
+
+model Chapter {
+  id      String  @id
+  config  Json
+  active  Boolean @default(true)
+  version Int     @default(1)
+
+  problems Problem[]
+}
+
+model Problem {
+  id               String    @id @default(cuid())
+  chapterId        String
+  subtopicId       String
+  level            Int
+  statement        String
+  statementLatex   String
+  answer           Json
+  options          Json
+  hint             String
+  solutionSteps    Json
+  estimatedSeconds Int
+  verified         Boolean   @default(false)
+  usedAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  chapter  Chapter   @relation(fields: [chapterId], references: [id])
+  attempts Attempt[]
+
+  @@index([chapterId, subtopicId, level])
+  @@index([verified, usedAt])
+}
+
+enum SessionStatus {
+  pending
+  active
+  complete
+}
+
+model Session {
+  id            String        @id @default(cuid())
+  studentId     String
+  date          DateTime      @default(now())
+  status        SessionStatus @default(pending)
+  problemIds    Json
+  score         Int?
+  medianSeconds Int?
+  perfect       Boolean?
+
+  student  Student   @relation(fields: [studentId], references: [id])
+  attempts Attempt[]
+
+  @@index([studentId, date])
+}
+
+model Attempt {
+  id               String   @id @default(cuid())
+  sessionId        String
+  problemId        String
+  chosenOptionIdx  Int
+  correct          Boolean
+  seconds          Int
+  misconceptionId  String?
+  retryOfAttemptId String?
+  createdAt        DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+  problem Problem @relation(fields: [problemId], references: [id])
+
+  @@index([sessionId])
+  @@index([problemId])
+}
+
+model SkillScore {
+  id         String   @id @default(cuid())
+  studentId  String
+  subtopicId String
+  elo        Int      @default(1000)
+  updatedAt  DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, subtopicId])
+}
+
+model Perk {
+  id        String  @id @default(cuid())
+  name      String
+  pointCost Int
+  active    Boolean @default(true)
+  icon      String?
+
+  redemptions Redemption[]
+}
+
+model PointsLedger {
+  id        String   @id @default(cuid())
+  studentId String
+  delta     Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@index([studentId])
+}
+
+enum RedemptionStatus {
+  pending
+  granted
+}
+
+model Redemption {
+  id        String           @id @default(cuid())
+  studentId String
+  perkId    String
+  status    RedemptionStatus @default(pending)
+  createdAt DateTime         @default(now())
+
+  student Student @relation(fields: [studentId], references: [id])
+  perk    Perk    @relation(fields: [perkId], references: [id])
+
+  @@index([studentId])
+}
+
+enum ReportType {
+  daily
+  weekly
+}
+
+model ParentReport {
+  id     String     @id @default(cuid())
+  date   DateTime   @default(now())
+  type   ReportType
+  body   String
+  sentAt DateTime?
+}

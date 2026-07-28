@@ -1,0 +1,225 @@
+{
+  "chapter_id": "fractions",
+  "version": 1,
+  "display_name": "Fractions",
+  "grade_calibration": {
+    "target_grade": 5,
+    "track": "olympiad",
+    "notes": "Levels 1-4 correspond to standard grade 5 curriculum. Levels 5-7 are advanced/enrichment. Levels 8-10 are olympiad-style (multi-step, requires insight, not just procedure)."
+  },
+
+  "subtopics": [
+    {
+      "id": "frac.equiv",
+      "name": "Equivalence & Simplification",
+      "description": "Recognizing equivalent fractions, reducing to lowest terms, converting between improper fractions and mixed numbers.",
+      "prerequisite_of": ["frac.add", "frac.sub", "frac.compare"]
+    },
+    {
+      "id": "frac.compare",
+      "name": "Comparing & Ordering",
+      "description": "Comparing fractions with unlike denominators, ordering sets of fractions, placing fractions between two given fractions."
+    },
+    {
+      "id": "frac.add",
+      "name": "Addition",
+      "description": "Adding fractions: like denominators, unlike denominators, mixed numbers, more than two terms."
+    },
+    {
+      "id": "frac.sub",
+      "name": "Subtraction",
+      "description": "Subtracting fractions: like denominators, unlike denominators, mixed numbers with regrouping (borrowing)."
+    },
+    {
+      "id": "frac.mul",
+      "name": "Multiplication",
+      "description": "Fraction x whole number, fraction x fraction, mixed numbers, cancelling before multiplying, 'of' as multiplication."
+    },
+    {
+      "id": "frac.div",
+      "name": "Division",
+      "description": "Dividing by a fraction (reciprocal method), whole / fraction, fraction / fraction, mixed numbers, interpreting division word contexts."
+    },
+    {
+      "id": "frac.word",
+      "name": "Word Problems",
+      "description": "Multi-step real-world problems combining operations. Includes part-of-a-part, remaining-quantity, and rate-style problems."
+    },
+    {
+      "id": "frac.var",
+      "name": "Equations with Variables",
+      "description": "Solving equations where fractions and variables mix, e.g. x + 1/3 = 3x, x/4 + 2 = 5, (2x+1)/3 = x - 1. Fraction coefficients and fraction answers.",
+      "prerequisite_of": []
+    }
+  ],
+
+  "difficulty_ladder": [
+    {
+      "level": 1,
+      "label": "Foundations",
+      "active_subtopics": ["frac.equiv", "frac.compare"],
+      "constraints": {
+        "denominators": "2-10, friendly (2,3,4,5,6,8,10)",
+        "operations": "none, recognition only",
+        "answer_form": "simplified proper fraction"
+      },
+      "example": "Which fraction is equivalent to 2/3?  ->  4/6"
+    },
+    {
+      "level": 2,
+      "label": "Like denominators",
+      "active_subtopics": ["frac.add", "frac.sub", "frac.equiv"],
+      "constraints": {
+        "denominators": "same denominator, 2-12",
+        "terms": 2,
+        "answer_form": "may require simplifying the result"
+      },
+      "example": "3/8 + 1/8 = ?  (answer must be simplified to 1/2)"
+    },
+    {
+      "level": 3,
+      "label": "Unlike denominators",
+      "active_subtopics": ["frac.add", "frac.sub", "frac.compare"],
+      "constraints": {
+        "denominators": "unlike, one is a multiple of the other (e.g. 3 and 6)",
+        "terms": 2
+      },
+      "example": "2/3 + 1/6 = ?"
+    },
+    {
+      "level": 4,
+      "label": "Full LCD + intro multiply",
+      "active_subtopics": ["frac.add", "frac.sub", "frac.mul"],
+      "constraints": {
+        "denominators": "coprime pairs allowed (e.g. 3 and 4), LCD required",
+        "multiplication": "fraction x whole, fraction x fraction, small values",
+        "terms": 2
+      },
+      "example": "2/3 + 1/4 = ?   |   2/5 x 3 = ?"
+    },
+    {
+      "level": 5,
+      "label": "Mixed numbers & division",
+      "active_subtopics": ["frac.add", "frac.sub", "frac.mul", "frac.div"],
+      "constraints": {
+        "mixed_numbers": true,
+        "regrouping_in_subtraction": true,
+        "division": "simple reciprocal cases",
+        "terms": 2
+      },
+      "example": "3 1/4 - 1 2/3 = ?   |   3/4 / 1/2 = ?"
+    },
+    {
+      "level": 6,
+      "label": "Fluency & three terms",
+      "active_subtopics": ["frac.add", "frac.sub", "frac.mul", "frac.div", "frac.word"],
+      "constraints": {
+        "terms": "up to 3, mixed operations with correct order of operations",
+        "cancelling": "problems designed so cross-cancelling saves time",
+        "word_problems": "single-step"
+      },
+      "example": "1/2 + 2/3 - 1/4 = ?   |   (4/9) x (3/8) = ? (rewards cancelling)"
+    },
+    {
+      "level": 7,
+      "label": "Intro variables",
+      "active_subtopics": ["frac.var", "frac.word", "frac.div"],
+      "constraints": {
+        "equations": "one-step and two-step, x on one side only",
+        "solutions": "integers or simple fractions",
+        "word_problems": "two-step"
+      },
+      "example": "x/4 = 3/8, find x   |   x + 1/3 = 5/6, find x"
+    },
+    {
+      "level": 8,
+      "label": "Variables both sides",
+      "active_subtopics": ["frac.var", "frac.word"],
+      "constraints": {
+        "equations": "x on both sides, fraction coefficients",
+        "solutions": "fractional solutions expected",
+        "word_problems": "multi-step, part-of-a-part"
+      },
+      "example": "x + 1/3 = 3x, find x   |   (2/3)x - 1 = (1/4)x + 2"
+    },
+    {
+      "level": 9,
+      "label": "Olympiad patterns",
+      "active_subtopics": ["frac.var", "frac.word", "frac.compare"],
+      "constraints": {
+        "styles": [
+          "telescoping sums like 1/(1x2) + 1/(2x3) + ... + 1/(9x10)",
+          "unit fraction decompositions (Egyptian fractions)",
+          "find a fraction between two fractions with smallest denominator",
+          "digit/unknown puzzles: a/b where conditions on a+b, a-b given"
+        ]
+      },
+      "example": "Compute 1/2 + 1/6 + 1/12 + 1/20 (spot the telescope)"
+    },
+    {
+      "level": 10,
+      "label": "Olympiad challenge",
+      "active_subtopics": ["frac.var", "frac.word"],
+      "constraints": {
+        "styles": [
+          "multi-constraint equation systems with fractions",
+          "work/rate problems (pipes, painters) requiring fraction reasoning",
+          "proof-flavored MCQ: 'which statement must be true'",
+          "competition-style: adapted from AMC 8 / Math Kangaroo difficulty"
+        ]
+      },
+      "example": "A tank fills in 3 h with pipe A, 4 h with pipe B. Both open, tank already 1/6 full: how long to fill?"
+    }
+  ],
+
+  "misconceptions": [
+    { "id": "M1", "subtopics": ["frac.add", "frac.sub"], "name": "adds/subtracts across", "description": "Adds numerators AND denominators: 2/3 + 1/4 -> 3/7", "distractor_rule": "(a+c)/(b+d)" },
+    { "id": "M2", "subtopics": ["frac.add", "frac.sub"], "name": "forgets to convert one fraction", "description": "Finds LCD but only converts one fraction: 2/3 + 1/6 -> 3/6", "distractor_rule": "convert only the first fraction to LCD, then add numerators" },
+    { "id": "M3", "subtopics": ["frac.add", "frac.sub", "frac.mul", "frac.div"], "name": "fails to simplify", "description": "Correct value but not in lowest terms: 3/8 + 1/8 -> 4/8", "distractor_rule": "correct answer left unsimplified" },
+    { "id": "M4", "subtopics": ["frac.sub"], "name": "regrouping error", "description": "In mixed number subtraction, subtracts smaller from larger numerator regardless of order: 3 1/4 - 1 3/4 -> 2 2/4", "distractor_rule": "swap numerators instead of borrowing" },
+    { "id": "M5", "subtopics": ["frac.mul"], "name": "finds common denominator to multiply", "description": "Applies addition procedure to multiplication: 2/3 x 1/4 -> converts to twelfths then multiplies numerators only", "distractor_rule": "common-denominator artifact" },
+    { "id": "M6", "subtopics": ["frac.div"], "name": "forgets to flip", "description": "Multiplies straight across without reciprocal: 3/4 / 1/2 -> 3/8", "distractor_rule": "multiply without inverting the divisor" },
+    { "id": "M7", "subtopics": ["frac.div"], "name": "flips the wrong fraction", "description": "Inverts the dividend instead of the divisor: 3/4 / 1/2 -> 4/3 x 1/2 = 2/3", "distractor_rule": "invert the first fraction" },
+    { "id": "M8", "subtopics": ["frac.compare"], "name": "bigger denominator = bigger fraction", "description": "Believes 1/8 > 1/4 because 8 > 4", "distractor_rule": "order by denominator size" },
+    { "id": "M9", "subtopics": ["frac.var"], "name": "moves terms without inverse operation", "description": "x + 1/3 = 3x -> x = 3x + 1/3 (sign/direction error when moving terms)", "distractor_rule": "wrong sign when transposing" },
+    { "id": "M10", "subtopics": ["frac.var"], "name": "divides only one side/term", "description": "2x = 2/3 -> x = 2/3 - 2, or divides only one term of a sum by the coefficient", "distractor_rule": "incomplete division across the equation" },
+    { "id": "M11", "subtopics": ["frac.var"], "name": "combines unlike terms", "description": "x + 1/3 treated as (x+1)/3 or as 1x/3", "distractor_rule": "merge constant into variable term" },
+    { "id": "M12", "subtopics": ["frac.word"], "name": "part-of-whole vs part-of-part", "description": "Takes fraction of the original quantity when the fraction applies to the remainder: 'ate 1/2, then 1/3 of the rest' -> computes 1/3 of the whole", "distractor_rule": "apply fraction to whole instead of remainder" }
+  ],
+
+  "session_defaults": {
+    "problems_per_session": 10,
+    "mix": { "weakest_subtopics": 0.6, "review_mastered": 0.2, "stretch_above_level": 0.2 },
+    "retry_on_wrong": true,
+    "hint_before_solution": true
+  },
+
+  "speed_targets_seconds": {
+    "comment": "Target median time per problem, by level. Only tighten speed once accuracy >= 0.85 at that level.",
+    "1": 30, "2": 40, "3": 50, "4": 60, "5": 75,
+    "6": 75, "7": 90, "8": 120, "9": 180, "10": 240
+  },
+
+  "mastery_rules": {
+    "score_model": "elo_per_subtopic",
+    "starting_score": 1000,
+    "level_up_when": "accuracy >= 0.85 over last 15 problems at current level AND median time <= speed target",
+    "level_down_when": "accuracy < 0.5 over last 10 problems at current level",
+    "mastered_threshold": "elo >= 1200 for the subtopic at grade-calibrated difficulty"
+  },
+
+  "generation_rules": {
+    "options_per_problem": 4,
+    "distractor_policy": "Each wrong option MUST map to a misconception id from this file. Include misconception_id in the stored option object.",
+    "position_policy": "Shuffle answer positions uniformly; never let correct answer occupy the same position more than 3 times in a row within a session.",
+    "none_of_these": "From level 6 up, 1 in 6 problems may use 'None of these' as an option (correct ~40% of the times it appears).",
+    "answer_storage": "Store the correct answer as structured data: {type: 'fraction', numerator, denominator} or {type: 'expression', value}. Never store as display string only. This enables free-input mode later.",
+    "verification": "Every generated problem must pass programmatic verification (math.js evaluation; for equations, substitute the solution back and check equality within 1e-9) before being saved. Discard and regenerate on failure.",
+    "language": "Keep problem wording short and concrete. Names, objects, and contexts should rotate (pizza, ribbons, race laps, water tanks) and stay culturally neutral."
+  },
+
+  "report_hooks": {
+    "per_session": ["accuracy", "median_time_vs_target", "misconceptions_hit", "streak", "level_changes"],
+    "weekly": ["elo_trend_per_subtopic", "top_2_misconceptions", "speed_trend", "recommended_focus_next_week"]
+  }
+}

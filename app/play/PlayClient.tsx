@@ -274,7 +274,7 @@ export function PlayClient({
         />
       </div>
 
-      <div className="w-full rounded-3xl bg-white dark:bg-neutral-900 shadow-lg shadow-purple-200/50 dark:shadow-black/40 px-6 py-8 text-2xl text-center">
+      <div className="w-full rounded-3xl bg-white dark:bg-neutral-900 shadow-lg shadow-purple-200/50 dark:shadow-black/40 px-6 py-8 text-lg sm:text-2xl text-center break-words">
         <BlockMath math={problem.statementLatex} />
       </div>
 

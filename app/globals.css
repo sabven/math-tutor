@@ -111,3 +111,22 @@ body {
 .animate-wiggle-in {
   animation: wiggle-in 0.4s ease-out;
 }
+
+/* KaTeX forces its display-mode output onto one non-wrapping line by
+   default, which overflows the problem card on longer word problems
+   (sentences with embedded fractions). Let it wrap like normal text —
+   individual math atoms (e.g. a \frac{}{}) are solid units and don't
+   break internally, so this only affects legitimate word/space breaks. */
+.katex-display {
+  white-space: normal !important;
+}
+
+.katex-display > .katex {
+  white-space: normal !important;
+  display: inline !important;
+}
+
+.katex-display > .katex > .katex-html {
+  display: inline !important;
+  white-space: normal !important;
+}

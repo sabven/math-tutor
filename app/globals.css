@@ -10,6 +10,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-fun: var(--font-fredoka);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -76,4 +77,37 @@ body {
 
 .animate-shake {
   animation: shake 0.35s ease-in-out;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(4deg);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes wiggle-in {
+  0% {
+    transform: scale(0) rotate(-15deg);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15) rotate(6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-wiggle-in {
+  animation: wiggle-in 0.4s ease-out;
 }

@@ -1,8 +1,10 @@
 import { prisma } from "./prisma";
 import {
-  buildBatchSpecForLevel,
+  buildAdaptiveBatchSpec,
   buildStudentState,
   generateAndSaveBatch,
+  shuffle,
+  BatchSpecEntry,
   ChapterConfig,
 } from "./generation";
 
@@ -22,6 +24,64 @@ function startOfDay(date: Date): Date {
 
 function endOfDay(date: Date): Date {
   return new Date(`${localDateString(date)}T23:59:59.999+08:00`);
+}
+
+/**
+ * Pulls unused verified problems matching each batch spec entry's exact
+ * (subtopicId, level) from the bank, generating fresh ones to fill any
+ * shortfall, then returns the combined, shuffled set.
+ */
+async function fillBatchFromBank(
+  chapterId: string,
+  studentId: string,
+  currentLevel: number,
+  batchSpec: BatchSpecEntry[]
+): Promise<Awaited<ReturnType<typeof prisma.problem.findMany>>> {
+  const picked: Awaited<ReturnType<typeof prisma.problem.findMany>> = [];
+  const shortfall: BatchSpecEntry[] = [];
+
+  for (const entry of batchSpec) {
+    const available = await prisma.problem.findMany({
+      where: {
+        chapterId,
+        subtopicId: entry.subtopic_id,
+        level: entry.level,
+        verified: true,
+        usedAt: null,
+      },
+      orderBy: { createdAt: "asc" },
+      take: entry.count,
+    });
+    picked.push(...available);
+    if (available.length < entry.count) {
+      shortfall.push({ ...entry, count: entry.count - available.length });
+    }
+  }
+
+  if (shortfall.length > 0) {
+    const config = (await prisma.chapter.findUniqueOrThrow({ where: { id: chapterId } }))
+      .config as unknown as ChapterConfig;
+    const studentState = await buildStudentState(studentId, config, currentLevel);
+    const shortfallTotal = shortfall.reduce((sum, e) => sum + e.count, 0);
+    await generateAndSaveBatch(chapterId, shortfallTotal, shortfall, studentState);
+
+    for (const entry of shortfall) {
+      const fresh = await prisma.problem.findMany({
+        where: {
+          chapterId,
+          subtopicId: entry.subtopic_id,
+          level: entry.level,
+          verified: true,
+          usedAt: null,
+        },
+        orderBy: { createdAt: "asc" },
+        take: entry.count,
+      });
+      picked.push(...fresh);
+    }
+  }
+
+  return shuffle(picked);
 }
 
 export async function getOrCreateTodaySession(chapterId = "fractions") {
@@ -52,35 +112,8 @@ export async function getOrCreateTodaySession(chapterId = "fractions") {
   const config = chapter.config as unknown as ChapterConfig;
   const batchSize = config.session_defaults.problems_per_session;
 
-  let bank = await prisma.problem.findMany({
-    where: {
-      chapterId,
-      level: student.currentLevel,
-      verified: true,
-      usedAt: null,
-    },
-    orderBy: { createdAt: "asc" },
-    take: batchSize,
-  });
-
-  if (bank.length < batchSize) {
-    const batchSpec = buildBatchSpecForLevel(config, student.currentLevel, batchSize);
-    const studentState = await buildStudentState(student.id, config, student.currentLevel);
-    await generateAndSaveBatch(chapterId, batchSize, batchSpec, studentState);
-
-    bank = await prisma.problem.findMany({
-      where: {
-        chapterId,
-        level: student.currentLevel,
-        verified: true,
-        usedAt: null,
-      },
-      orderBy: { createdAt: "asc" },
-      take: batchSize,
-    });
-  }
-
-  const problems = bank.slice(0, batchSize);
+  const batchSpec = await buildAdaptiveBatchSpec(config, student.id, student.currentLevel, batchSize);
+  const problems = await fillBatchFromBank(chapterId, student.id, student.currentLevel, batchSpec);
   const problemIds = problems.map((p) => p.id);
 
   await prisma.problem.updateMany({

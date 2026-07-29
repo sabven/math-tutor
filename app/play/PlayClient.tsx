@@ -26,6 +26,8 @@ interface AttemptRecord {
   seconds: number;
 }
 
+type Phase = "unanswered" | "correct" | "hint" | "solution";
+
 const CORRECT_MESSAGES = [
   "Fraction ninja! 🥷",
   "Nailed it! ✨",
@@ -37,14 +39,9 @@ const CORRECT_MESSAGES = [
   "Too easy for you! 😎",
 ];
 
-const WRONG_MESSAGES = [
-  "Sneaky one! 🤔",
-  "So close, try again next time! 😅",
-  "That one had a trap! 🪤",
-  "Oops! The fraction gremlin got you. 👻",
-  "Not quite — check the hint below!",
-  "Tricky! Here's the answer.",
-];
+function pickRandom(arr: string[]): string {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 type Shape = "triangle" | "diamond" | "circle" | "square";
 
@@ -54,10 +51,6 @@ const OPTION_THEME: { shape: Shape; solid: string; ring: string }[] = [
   { shape: "circle", solid: "bg-amber-400 dark:bg-amber-500", ring: "ring-amber-300" },
   { shape: "square", solid: "bg-emerald-400 dark:bg-emerald-500", ring: "ring-emerald-300" },
 ];
-
-function pickRandom(arr: string[]): string {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 function ShapeIcon({ shape }: { shape: Shape }) {
   const common = "h-6 w-6 fill-current shrink-0 drop-shadow";
@@ -99,7 +92,7 @@ function ProgressTrail({
   records: AttemptRecord[];
 }) {
   return (
-    <div className="flex items-center justify-center gap-1.5">
+    <div className="flex items-center justify-center gap-1.5 flex-wrap">
       {Array.from({ length: total }).map((_, i) => {
         const rec = records[i];
         if (rec) {
@@ -132,6 +125,7 @@ export function PlayClient({
   sessionId: string;
   problems: PlayProblem[];
 }) {
+  const [problemList, setProblemList] = useState(problems);
   const [index, setIndex] = useState(0);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [chosenIdx, setChosenIdx] = useState<number | null>(null);
@@ -139,11 +133,15 @@ export function PlayClient({
   const [barFilled, setBarFilled] = useState(false);
   const [records, setRecords] = useState<AttemptRecord[]>([]);
   const [done, setDone] = useState(false);
+  const [phase, setPhase] = useState<Phase>("unanswered");
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [liveHint, setLiveHint] = useState<string | null>(null);
+  const [solutionSteps, setSolutionSteps] = useState<string[]>([]);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [shake, setShake] = useState(false);
+  const [levelBanner, setLevelBanner] = useState<string | null>(null);
 
-  const problem = problems[index];
+  const problem = problemList[index];
 
   let streak = 0;
   for (let i = records.length - 1; i >= 0; i--) {
@@ -156,13 +154,22 @@ export function PlayClient({
     setChosenIdx(null);
     setCorrectIdx(null);
     setBarFilled(false);
+    setPhase("unanswered");
     setFeedbackMessage(null);
+    setLiveHint(null);
+    setSolutionSteps([]);
     setShake(false);
     const t = setTimeout(() => setBarFilled(true), 50);
     return () => clearTimeout(t);
   }, [index]);
 
-  if (!problems.length) {
+  useEffect(() => {
+    if (!levelBanner) return;
+    const t = setTimeout(() => setLevelBanner(null), 3500);
+    return () => clearTimeout(t);
+  }, [levelBanner]);
+
+  if (!problemList.length) {
     return (
       <main className="flex-1 flex items-center justify-center p-8 bg-gradient-to-br from-sky-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-950">
         <p className="text-lg text-neutral-500 dark:text-neutral-400">
@@ -186,19 +193,40 @@ export function PlayClient({
     setCorrectIdx(data.correctIdx);
     setRecords((prev) => [...prev, { correct: data.correct, seconds }]);
 
+    if (data.levelChange === "up") {
+      setLevelBanner(`🎉 Level up! Now at Level ${data.newLevel}`);
+    } else if (data.levelChange === "down") {
+      setLevelBanner(`💪 Dialing it back to Level ${data.newLevel} for more practice`);
+    }
+
     if (data.correct) {
       playCorrectSound();
+      setPhase("correct");
       setFeedbackMessage(pickRandom(CORRECT_MESSAGES));
       setConfettiTrigger((t) => t + 1);
     } else {
       playWrongSound();
-      setFeedbackMessage(pickRandom(WRONG_MESSAGES));
       setShake(true);
+      setPhase("hint");
+      setLiveHint(data.hint ?? problem.hint);
+      setSolutionSteps(data.solutionSteps ?? []);
+      if (data.retryProblem) {
+        const retry: PlayProblem = data.retryProblem;
+        setProblemList((prev) => {
+          const next = [...prev];
+          next.splice(index + 1, 0, retry);
+          return next;
+        });
+      }
     }
   }
 
+  function showSolution() {
+    setPhase("solution");
+  }
+
   async function next() {
-    if (index + 1 < problems.length) {
+    if (index + 1 < problemList.length) {
       setIndex(index + 1);
       return;
     }
@@ -206,7 +234,7 @@ export function PlayClient({
     const correctCount = records.filter((r) => r.correct).length;
     const times = [...records.map((r) => r.seconds)].sort((a, b) => a - b);
     const medianSeconds = times.length ? times[Math.floor(times.length / 2)] : 0;
-    const perfect = correctCount === problems.length;
+    const perfect = correctCount === problemList.length;
 
     await fetch(`/api/sessions/${sessionId}/complete`, {
       method: "PATCH",
@@ -223,8 +251,8 @@ export function PlayClient({
 
   if (done) {
     const correctCount = records.filter((r) => r.correct).length;
-    const perfect = correctCount === problems.length;
-    const stars = correctCount === problems.length ? 3 : correctCount >= problems.length * 0.7 ? 2 : 1;
+    const perfect = correctCount === problemList.length;
+    const stars = correctCount === problemList.length ? 3 : correctCount >= problemList.length * 0.7 ? 2 : 1;
     return (
       <main className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center bg-gradient-to-br from-sky-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-950">
         <ConfettiBurst trigger={confettiTrigger} count={perfect ? 60 : 24} />
@@ -236,7 +264,7 @@ export function PlayClient({
           {perfect ? "Perfect score!" : "Great job today!"}
         </h1>
         <p className="text-xl text-neutral-700 dark:text-neutral-200">
-          {correctCount} / {problems.length} correct
+          {correctCount} / {problemList.length} correct
         </p>
       </main>
     );
@@ -244,10 +272,17 @@ export function PlayClient({
 
   const progressWidthPct = barFilled ? 100 : 0;
   const progressDurationS = Math.max(problem.estimatedSeconds, 10);
+  const revealCorrect = phase === "correct" || phase === "solution";
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center gap-6 p-6 max-w-2xl mx-auto w-full bg-gradient-to-br from-sky-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-950">
       <ConfettiBurst trigger={confettiTrigger} />
+
+      {levelBanner && (
+        <div className="font-fun fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-full bg-purple-600 text-white px-5 py-2 text-sm font-semibold shadow-lg animate-pop-in">
+          {levelBanner}
+        </div>
+      )}
 
       <div className="flex w-full items-center justify-between">
         <h1 className="font-fun text-2xl font-semibold text-purple-700 dark:text-purple-200">
@@ -260,7 +295,7 @@ export function PlayClient({
         )}
       </div>
 
-      <ProgressTrail total={problems.length} currentIndex={index} records={records} />
+      <ProgressTrail total={problemList.length} currentIndex={index} records={records} />
 
       <div className="w-full h-3 bg-white/50 dark:bg-white/10 rounded-full overflow-hidden shadow-inner">
         <div
@@ -284,7 +319,7 @@ export function PlayClient({
           let colorClasses = `${theme.solid} text-white active:scale-95 hover:brightness-105`;
           let extra = "";
           if (chosenIdx !== null) {
-            if (i === correctIdx) {
+            if (revealCorrect && i === correctIdx) {
               extra = "animate-pop-in ring-4 ring-offset-2 dark:ring-offset-neutral-900 " + theme.ring;
             } else if (i === chosenIdx) {
               colorClasses = "bg-neutral-400 dark:bg-neutral-600 text-white";
@@ -307,22 +342,45 @@ export function PlayClient({
         })}
       </div>
 
-      {feedbackMessage && (
-        <p
-          className={`font-fun text-lg font-semibold animate-pop-in ${
-            records[records.length - 1]?.correct ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500"
-          }`}
-        >
+      {phase === "correct" && feedbackMessage && (
+        <p className="font-fun text-lg font-semibold animate-pop-in text-emerald-600 dark:text-emerald-400">
           {feedbackMessage}
         </p>
       )}
 
-      {chosenIdx !== null && (
+      {phase === "hint" && (
+        <div className="w-full rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 px-5 py-4 animate-pop-in">
+          <p className="font-fun text-rose-500 font-semibold mb-1">Not quite!</p>
+          <p className="text-neutral-700 dark:text-neutral-200">💡 {liveHint}</p>
+        </div>
+      )}
+
+      {phase === "solution" && (
+        <div className="w-full rounded-2xl bg-sky-50 dark:bg-sky-950/40 border-2 border-sky-300 dark:border-sky-700 px-5 py-4 animate-pop-in text-left">
+          <p className="font-fun text-sky-700 dark:text-sky-300 font-semibold mb-2">Here's how:</p>
+          <ol className="list-decimal list-inside space-y-1 text-neutral-700 dark:text-neutral-200">
+            {solutionSteps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {phase === "hint" && (
+        <button
+          onClick={showSolution}
+          className="font-fun px-8 py-3 rounded-full bg-sky-600 text-white font-semibold text-lg shadow-lg hover:bg-sky-700 active:scale-95 transition-all"
+        >
+          Show me the answer
+        </button>
+      )}
+
+      {(phase === "correct" || phase === "solution") && (
         <button
           onClick={next}
           className="font-fun mt-1 px-8 py-3 rounded-full bg-purple-600 text-white font-semibold text-lg shadow-lg shadow-purple-300 dark:shadow-purple-950 hover:bg-purple-700 active:scale-95 transition-all"
         >
-          {index + 1 < problems.length ? "Next →" : "Finish 🎉"}
+          {index + 1 < problemList.length ? "Next →" : "Finish 🎉"}
         </button>
       )}
     </main>

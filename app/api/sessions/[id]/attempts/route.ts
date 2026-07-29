@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-interface StoredOption {
-  display: string;
-  is_correct: boolean;
-  misconception_id: string | null;
-}
+import { ChapterConfig } from "@/lib/generation";
+import { applyLevelChange, checkLevelChange, updateSkillScore } from "@/lib/elo";
+import { generateHintAndRetry, StoredOption } from "@/lib/hintRetry";
 
 export async function POST(
   req: NextRequest,
@@ -19,7 +16,10 @@ export async function POST(
     seconds: number;
   };
 
-  const problem = await prisma.problem.findUniqueOrThrow({ where: { id: problemId } });
+  const [problem, session] = await Promise.all([
+    prisma.problem.findUniqueOrThrow({ where: { id: problemId } }),
+    prisma.session.findUniqueOrThrow({ where: { id: sessionId } }),
+  ]);
   const options = problem.options as unknown as StoredOption[];
   const chosen = options[chosenOptionIdx];
   const correctIdx = options.findIndex((o) => o.is_correct);
@@ -36,10 +36,72 @@ export async function POST(
     },
   });
 
+  const chapter = await prisma.chapter.findUniqueOrThrow({ where: { id: problem.chapterId } });
+  const config = chapter.config as unknown as ChapterConfig;
+  const speedTarget = config.speed_targets_seconds[String(problem.level)] ?? 60;
+
+  await updateSkillScore(
+    session.studentId,
+    problem.subtopicId,
+    problem.level,
+    correct,
+    seconds,
+    speedTarget
+  );
+
+  const student = await prisma.student.findUniqueOrThrow({ where: { id: session.studentId } });
+  const levelChange = await checkLevelChange(session.studentId, student.currentLevel, speedTarget);
+  const newLevel = await applyLevelChange(
+    session.studentId,
+    student.currentLevel,
+    levelChange,
+    config.difficulty_ladder.length
+  );
+
+  if (correct) {
+    return NextResponse.json({
+      correct,
+      correctIdx,
+      solutionSteps: problem.solutionSteps,
+      levelChange,
+      newLevel,
+    });
+  }
+
+  const { hint, encouragement, retryProblem } = await generateHintAndRetry(
+    problem,
+    chosen ?? { display: "", is_correct: false, misconception_id: null },
+    config,
+    seconds
+  );
+
+  if (retryProblem) {
+    await prisma.problem.update({ where: { id: retryProblem.id }, data: { usedAt: new Date() } });
+    const problemIds = session.problemIds as string[];
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { problemIds: [...problemIds, retryProblem.id] },
+    });
+  }
+
   return NextResponse.json({
     correct,
     correctIdx,
-    hint: problem.hint,
     solutionSteps: problem.solutionSteps,
+    hint,
+    encouragement,
+    levelChange,
+    newLevel,
+    retryProblem: retryProblem
+      ? {
+          id: retryProblem.id,
+          statement: retryProblem.statement,
+          statementLatex: retryProblem.statementLatex,
+          options: retryProblem.options,
+          hint: retryProblem.hint,
+          solutionSteps: retryProblem.solutionSteps,
+          estimatedSeconds: retryProblem.estimatedSeconds,
+        }
+      : null,
   });
 }

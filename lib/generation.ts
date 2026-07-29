@@ -18,7 +18,13 @@ export interface ChapterConfig {
     level: number;
     active_subtopics: string[];
   }[];
-  misconceptions: { id: string }[];
+  misconceptions: {
+    id: string;
+    subtopics: string[];
+    name: string;
+    description: string;
+    distractor_rule: string;
+  }[];
   session_defaults: {
     problems_per_session: number;
   };
@@ -26,15 +32,21 @@ export interface ChapterConfig {
     options_per_problem: number;
     position_policy: string;
   };
+  speed_targets_seconds: Record<string, number>;
 }
 
-interface RawOption {
+// Mirrors mastery_rules.mastered_threshold in the chapter config ("elo >= 1200
+// for the subtopic at grade-calibrated difficulty"), which is prose, not a
+// machine-parseable value.
+export const MASTERED_ELO_THRESHOLD = 1200;
+
+export interface RawOption {
   display: string;
   is_correct: boolean;
   misconception_id: string | null;
 }
 
-interface RawProblem {
+export interface RawProblem {
   temp_id: string;
   subtopic_id: string;
   level: number;
@@ -66,20 +78,103 @@ export interface StudentState {
   recent_problem_statements: string[];
 }
 
-export function buildBatchSpecForLevel(
-  config: ChapterConfig,
+function distributeCounts(subtopicIds: string[], total: number): number[] {
+  if (subtopicIds.length === 0 || total <= 0) return subtopicIds.map(() => 0);
+  const base = Math.floor(total / subtopicIds.length);
+  let remainder = total - base * subtopicIds.length;
+  return subtopicIds.map(() => base + (remainder-- > 0 ? 1 : 0));
+}
+
+function distribute(
+  entries: BatchSpecEntry[],
+  subtopicIds: string[],
   level: number,
-  totalCount: number
-): BatchSpecEntry[] {
-  const rung = config.difficulty_ladder.find((l) => l.level === level);
-  if (!rung) throw new Error(`No difficulty ladder entry for level ${level}`);
-  const subtopics = rung.active_subtopics;
-  const base = Math.floor(totalCount / subtopics.length);
-  let remainder = totalCount - base * subtopics.length;
-  return subtopics.map((subtopic_id) => {
-    const count = base + (remainder-- > 0 ? 1 : 0);
-    return { subtopic_id, level, count };
+  total: number,
+  flags: Partial<Pick<BatchSpecEntry, "stretch" | "review">>
+) {
+  if (subtopicIds.length === 0 || total <= 0) return;
+  const counts = distributeCounts(subtopicIds, total);
+  subtopicIds.forEach((subtopic_id, i) => {
+    if (counts[i] > 0) entries.push({ subtopic_id, level, count: counts[i], ...flags });
   });
+}
+
+function mergeBatchSpecEntries(entries: BatchSpecEntry[]): BatchSpecEntry[] {
+  const map = new Map<string, BatchSpecEntry>();
+  for (const e of entries) {
+    const key = `${e.subtopic_id}|${e.level}|${e.stretch ?? false}|${e.review ?? false}`;
+    const existing = map.get(key);
+    if (existing) existing.count += e.count;
+    else map.set(key, { ...e });
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Builds the 60% weakest / 20% review-mastered / 20% stretch batch mix from
+ * session_defaults.mix, using real per-subtopic Elo to target the weakest
+ * subtopics first, review subtopics already mastered at earlier levels, and
+ * stretch into the next level up.
+ */
+export async function buildAdaptiveBatchSpec(
+  config: ChapterConfig,
+  studentId: string,
+  currentLevel: number,
+  totalCount: number
+): Promise<BatchSpecEntry[]> {
+  const rung = config.difficulty_ladder.find((l) => l.level === currentLevel);
+  if (!rung) throw new Error(`No difficulty ladder entry for level ${currentLevel}`);
+
+  const skillScores = await prisma.skillScore.findMany({ where: { studentId } });
+  const eloBySubtopic = new Map(skillScores.map((s) => [s.subtopicId, s.elo]));
+  const eloFor = (id: string) => eloBySubtopic.get(id) ?? 1000;
+
+  const weakestCount = Math.round(totalCount * 0.6);
+  const reviewCount = Math.round(totalCount * 0.2);
+  const stretchCount = totalCount - weakestCount - reviewCount;
+
+  const entries: BatchSpecEntry[] = [];
+
+  const currentSubtopics = [...rung.active_subtopics].sort((a, b) => eloFor(a) - eloFor(b));
+  distribute(entries, currentSubtopics, currentLevel, weakestCount, {});
+
+  const masteredEarlier: { subtopic_id: string; level: number }[] = [];
+  for (const earlierRung of config.difficulty_ladder.filter((l) => l.level < currentLevel)) {
+    for (const id of earlierRung.active_subtopics) {
+      if (eloFor(id) >= MASTERED_ELO_THRESHOLD && !masteredEarlier.some((m) => m.subtopic_id === id)) {
+        masteredEarlier.push({ subtopic_id: id, level: earlierRung.level });
+      }
+    }
+  }
+  if (masteredEarlier.length > 0) {
+    for (const { subtopic_id, level } of masteredEarlier) {
+      distribute(entries, [subtopic_id], level, Math.ceil(reviewCount / masteredEarlier.length), {
+        review: true,
+      });
+    }
+  } else {
+    // Nothing mastered yet to review — fold this slice back into current-level practice.
+    distribute(entries, currentSubtopics, currentLevel, reviewCount, {});
+  }
+
+  const nextRung = config.difficulty_ladder.find((l) => l.level === currentLevel + 1);
+  if (nextRung) {
+    distribute(entries, nextRung.active_subtopics, nextRung.level, stretchCount, { stretch: true });
+  } else {
+    distribute(entries, currentSubtopics, currentLevel, stretchCount, {});
+  }
+
+  const merged = mergeBatchSpecEntries(entries);
+  // Rounding across three buckets can drift the total by a problem or two —
+  // true it up on the largest (weakest-practice, unflagged) entry.
+  const drift = totalCount - merged.reduce((sum, e) => sum + e.count, 0);
+  if (drift !== 0) {
+    const target =
+      merged.find((e) => !e.stretch && !e.review) ?? merged[merged.length - 1];
+    if (target) target.count = Math.max(1, target.count + drift);
+  }
+
+  return merged;
 }
 
 export async function buildStudentState(
@@ -87,10 +182,11 @@ export async function buildStudentState(
   config: ChapterConfig,
   level: number
 ): Promise<StudentState> {
+  const skillScores = await prisma.skillScore.findMany({ where: { studentId } });
+  const eloBySubtopic = new Map(skillScores.map((s) => [s.subtopicId, s.elo]));
   const subtopic_elo: Record<string, number> = {};
-  const rung = config.difficulty_ladder.find((l) => l.level === level);
-  for (const id of rung?.active_subtopics ?? []) {
-    subtopic_elo[id] = 1000;
+  for (const subtopic of config.subtopics) {
+    subtopic_elo[subtopic.id] = eloBySubtopic.get(subtopic.id) ?? 1000;
   }
 
   const recentAttempts = await prisma.attempt.findMany({
@@ -135,7 +231,7 @@ function parseModelJsonArray(text: string): RawProblem[] {
   return JSON.parse(trimmed.slice(start, end + 1));
 }
 
-function verifyProblem(problem: RawProblem, config: ChapterConfig): string | null {
+export function verifyProblem(problem: RawProblem, config: ChapterConfig): string | null {
   if (!problem.options || problem.options.length !== config.generation_rules.options_per_problem) {
     return "wrong option count";
   }
@@ -173,7 +269,7 @@ function verifyProblem(problem: RawProblem, config: ChapterConfig): string | nul
   return null;
 }
 
-function shuffle<T>(arr: T[]): T[] {
+export function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -237,23 +333,27 @@ export async function generateAndSaveBatch(
   }
 
   for (const problem of verified) {
-    const shuffledOptions = shuffle(problem.options);
-    await prisma.problem.create({
-      data: {
-        chapterId,
-        subtopicId: problem.subtopic_id,
-        level: problem.level,
-        statement: problem.statement,
-        statementLatex: problem.statement_latex,
-        answer: problem.answer as unknown as Prisma.InputJsonValue,
-        options: shuffledOptions as unknown as Prisma.InputJsonValue,
-        hint: problem.hint,
-        solutionSteps: problem.solution_steps as unknown as Prisma.InputJsonValue,
-        estimatedSeconds: problem.estimated_seconds,
-        verified: true,
-      },
-    });
+    await saveVerifiedProblem(chapterId, problem);
   }
 
   return { saved: verified.length, requested: batchSize, failures };
+}
+
+export async function saveVerifiedProblem(chapterId: string, problem: RawProblem) {
+  const shuffledOptions = shuffle(problem.options);
+  return prisma.problem.create({
+    data: {
+      chapterId,
+      subtopicId: problem.subtopic_id,
+      level: problem.level,
+      statement: problem.statement,
+      statementLatex: problem.statement_latex,
+      answer: problem.answer as unknown as Prisma.InputJsonValue,
+      options: shuffledOptions as unknown as Prisma.InputJsonValue,
+      hint: problem.hint,
+      solutionSteps: problem.solution_steps as unknown as Prisma.InputJsonValue,
+      estimatedSeconds: problem.estimated_seconds,
+      verified: true,
+    },
+  });
 }

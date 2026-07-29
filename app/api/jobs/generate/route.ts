@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  buildBatchSpecForLevel,
+  buildAdaptiveBatchSpec,
   buildStudentState,
   generateAndSaveBatch,
   ChapterConfig,
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const config = chapter.config as unknown as ChapterConfig;
 
   const batchSize: number = body.batchSize ?? config.session_defaults.problems_per_session;
-  const batchSpec = buildBatchSpecForLevel(config, student.currentLevel, batchSize);
+  const batchSpec = await buildAdaptiveBatchSpec(config, student.id, student.currentLevel, batchSize);
   const studentState = await buildStudentState(student.id, config, student.currentLevel);
 
   const result = await generateAndSaveBatch(chapterId, batchSize, batchSpec, studentState);

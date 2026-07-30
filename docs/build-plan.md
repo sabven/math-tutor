@@ -125,6 +125,10 @@ Everything keyed by `studentId` from day one — multi-kid ready.
      protected by a secret header, and trigger them with EventBridge →
      API destinations. Zero extra deploy pipeline; graduate to real Lambdas
      later.
+   - **What's actually running**: `nightly-batch` is wired up via a GitHub
+     Actions cron (`.github/workflows/nightly-batch.yml`) calling the secret-
+     header-protected route instead of EventBridge — no AWS scheduling infra
+     needed at all. `daily-report` is not implemented (see Phase 3).
 
 5. **Budget guard**
    - AWS Budgets: alert at $10/month. Anthropic console: set a monthly spend
@@ -163,13 +167,20 @@ Build:
   retry problem with new numbers. Retry correctness tracked separately.
 - Kid-friendly `/play` redesign: sounds, confetti, streak flame, silly
   correct-answer messages, level-up/down banner.
+- Nightly pre-generation: `.github/workflows/nightly-batch.yml` calls
+  `POST /api/jobs/generate` at 18:00 UTC (2:00 AM SGT) via a GitHub Actions
+  cron, not the originally-spec'd EventBridge → Lambda (the app runs on
+  Amplify Hosting with no Lambda deploy pipeline, so a scheduled workflow
+  hitting the existing secret-header-protected API route is the equivalent
+  with zero extra infra). Requires the `JOB_SECRET` repo secret to be set
+  in GitHub (Settings → Secrets and variables → Actions) to match Amplify's
+  `JOB_SECRET` env var; optionally `APP_URL` to override the hardcoded
+  Amplify URL fallback in the workflow.
 Acceptance: after a week of sessions, levels and Elo visibly move, and
 wrong answers always route through hint → solution → retry.
-Not done: the nightly EventBridge batch job itself (2am SGT pre-generation)
-was never deployed as real AWS infra — `getOrCreateTodaySession` generates
-lazily on first `/play` visit of the day instead, filling any shortfall from
-the bank on demand. Functionally equivalent from Smaya's side (she never
-waits on more than a bank shortfall), just not "ahead of time."
+`getOrCreateTodaySession` still generates lazily on first `/play` visit as a
+fallback if a nightly run is ever missed, so a skipped workflow run degrades
+gracefully rather than breaking anything.
 
 ### Phase 3 — Parent dashboard + reports (in progress)
 Done:

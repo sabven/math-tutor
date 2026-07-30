@@ -1,0 +1,36 @@
+name: Nightly problem batch
+
+# Pre-generates tomorrow's adaptive problem batch ahead of time, matching the
+# "nightly-batch" job described in docs/build-plan.md (originally spec'd as
+# EventBridge -> Lambda; this is the GitHub-Actions equivalent since the app
+# runs on Amplify Hosting without a Lambda deploy pipeline). getOrCreateTodaySession
+# already generates lazily on first /play visit if this job doesn't run, so a
+# missed run degrades gracefully rather than breaking anything.
+
+on:
+  schedule:
+    # 18:00 UTC = 2:00 AM Singapore time (UTC+8)
+    - cron: "0 18 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger nightly batch generation
+        env:
+          JOB_SECRET: ${{ secrets.JOB_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          url="${APP_URL:-https://main.d3c3s2ef4r2j0t.amplifyapp.com}/api/jobs/generate"
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST "$url" \
+            -H "X-Job-Secret: $JOB_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "HTTP status: $status"
+          cat /tmp/response.json
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "::error::Nightly batch generation failed with status $status"
+            exit 1
+          fi

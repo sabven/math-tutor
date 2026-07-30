@@ -14,6 +14,12 @@ model Student {
   currentLevel Int      @default(1)
   createdAt    DateTime @default(now())
 
+  // Parent-tunable overrides. Null means "use the chapter config's default".
+  sessionLength       Int?
+  activeSubtopicIds   Json?    // string[] | null
+  difficultyCeiling   Int?
+  speedTargetsEnabled Boolean  @default(true)
+
   sessions     Session[]
   skillScores  SkillScore[]
   pointsLedger PointsLedger[]

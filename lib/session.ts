@@ -93,9 +93,15 @@ export async function getOrCreateTodaySession(chapterId = "fractions") {
 
   const chapter = await prisma.chapter.findUniqueOrThrow({ where: { id: chapterId } });
   const config = chapter.config as unknown as ChapterConfig;
-  const batchSize = config.session_defaults.problems_per_session;
+  const batchSize = student.sessionLength ?? config.session_defaults.problems_per_session;
 
-  const batchSpec = await buildAdaptiveBatchSpec(config, student.id, student.currentLevel, batchSize);
+  const batchSpec = await buildAdaptiveBatchSpec(
+    config,
+    student.id,
+    student.currentLevel,
+    batchSize,
+    student.activeSubtopicIds as string[] | null
+  );
   const problems = await fillBatchFromBank(chapterId, student.id, student.currentLevel, batchSpec);
   const problemIds = problems.map((p) => p.id);
 

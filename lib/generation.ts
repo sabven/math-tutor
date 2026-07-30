@@ -16,6 +16,7 @@ export interface ChapterConfig {
   subtopics: { id: string; name: string }[];
   difficulty_ladder: {
     level: number;
+    label?: string;
     active_subtopics: string[];
   }[];
   misconceptions: {
@@ -120,10 +121,17 @@ export async function buildAdaptiveBatchSpec(
   config: ChapterConfig,
   studentId: string,
   currentLevel: number,
-  totalCount: number
+  totalCount: number,
+  allowedSubtopicIds?: string[] | null
 ): Promise<BatchSpecEntry[]> {
   const rung = config.difficulty_ladder.find((l) => l.level === currentLevel);
   if (!rung) throw new Error(`No difficulty ladder entry for level ${currentLevel}`);
+
+  // A parent-set active-subtopics filter (null/empty = no restriction).
+  const restrict = (ids: string[]) =>
+    allowedSubtopicIds && allowedSubtopicIds.length > 0
+      ? ids.filter((id) => allowedSubtopicIds.includes(id))
+      : ids;
 
   const skillScores = await prisma.skillScore.findMany({ where: { studentId } });
   const eloBySubtopic = new Map(skillScores.map((s) => [s.subtopicId, s.elo]));
@@ -135,12 +143,14 @@ export async function buildAdaptiveBatchSpec(
 
   const entries: BatchSpecEntry[] = [];
 
-  const currentSubtopics = [...rung.active_subtopics].sort((a, b) => eloFor(a) - eloFor(b));
+  const currentSubtopics = restrict([...rung.active_subtopics]).sort(
+    (a, b) => eloFor(a) - eloFor(b)
+  );
   distribute(entries, currentSubtopics, currentLevel, weakestCount, {});
 
   const masteredEarlier: { subtopic_id: string; level: number }[] = [];
   for (const earlierRung of config.difficulty_ladder.filter((l) => l.level < currentLevel)) {
-    for (const id of earlierRung.active_subtopics) {
+    for (const id of restrict(earlierRung.active_subtopics)) {
       if (eloFor(id) >= MASTERED_ELO_THRESHOLD && !masteredEarlier.some((m) => m.subtopic_id === id)) {
         masteredEarlier.push({ subtopic_id: id, level: earlierRung.level });
       }
@@ -159,7 +169,9 @@ export async function buildAdaptiveBatchSpec(
 
   const nextRung = config.difficulty_ladder.find((l) => l.level === currentLevel + 1);
   if (nextRung) {
-    distribute(entries, nextRung.active_subtopics, nextRung.level, stretchCount, { stretch: true });
+    distribute(entries, restrict(nextRung.active_subtopics), nextRung.level, stretchCount, {
+      stretch: true,
+    });
   } else {
     distribute(entries, currentSubtopics, currentLevel, stretchCount, {});
   }

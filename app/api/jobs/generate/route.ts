@@ -23,8 +23,15 @@ export async function POST(req: NextRequest) {
   const chapter = await prisma.chapter.findUniqueOrThrow({ where: { id: chapterId } });
   const config = chapter.config as unknown as ChapterConfig;
 
-  const batchSize: number = body.batchSize ?? config.session_defaults.problems_per_session;
-  const batchSpec = await buildAdaptiveBatchSpec(config, student.id, student.currentLevel, batchSize);
+  const batchSize: number =
+    body.batchSize ?? student.sessionLength ?? config.session_defaults.problems_per_session;
+  const batchSpec = await buildAdaptiveBatchSpec(
+    config,
+    student.id,
+    student.currentLevel,
+    batchSize,
+    student.activeSubtopicIds as string[] | null
+  );
   const studentState = await buildStudentState(student.id, config, student.currentLevel);
 
   const result = await generateAndSaveBatch(chapterId, batchSize, batchSpec, studentState);

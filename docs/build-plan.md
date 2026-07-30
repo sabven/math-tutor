@@ -1,6 +1,6 @@
 # Math Tutor — Build Plan
 Tech stack, AWS setup, and phase-by-phase delivery plan.
-Companion files: `fractions-chapter-config.json`, `problem-generation-prompt.md`
+Companion files: `data/chapters/fractions.json`, `problem-generation-prompt.md`
 
 ---
 
@@ -57,7 +57,9 @@ Key principle: problems are generated and verified ahead of time. Smaya never wa
 ## 3. Data Model (Prisma sketch)
 
 ```
-Student      id, name, currentLevel, createdAt
+Student      id, name, currentLevel, createdAt,
+             sessionLength Int?, activeSubtopicIds Json?, difficultyCeiling Int?,
+             speedTargetsEnabled Boolean (parent-tunable overrides; null = chapter default)
 Chapter      id, config Json, active Boolean, version
 Problem      id, chapterId, subtopicId, level, statement, statementLatex,
              answer Json, options Json (shuffled, with misconceptionIds),
@@ -67,12 +69,17 @@ Session      id, studentId, date, status (pending/active/complete),
              problemIds Json, score, medianSeconds, perfect Boolean
 Attempt      id, sessionId, problemId, chosenOptionIdx, correct Boolean,
              seconds Int, misconceptionId String?, retryOfAttemptId?
+             (retryOfAttemptId is schema-only — never populated; retry/original
+             pairing is inferred at read time from problemIds order instead)
 SkillScore   id, studentId, subtopicId, elo Int, updatedAt
-Perk         id, name, pointCost, active, icon
-PointsLedger id, studentId, delta, reason, createdAt
-Redemption   id, studentId, perkId, status (pending/granted), createdAt
-ParentReport id, date, type (daily/weekly), body, sentAt
+Perk         id, name, pointCost, active, icon                    -- schema only, no logic yet (Phase 4)
+PointsLedger id, studentId, delta, reason, createdAt               -- schema only, no logic yet (Phase 4)
+Redemption   id, studentId, perkId, status (pending/granted), createdAt  -- schema only, no logic yet (Phase 4)
+ParentReport id, date, type (daily/weekly), body, sentAt           -- schema only, no logic yet (Phase 3 email)
 ```
+
+No migration history is tracked (`prisma/migrations` doesn't exist) — schema changes are applied
+straight to the Neon DB with `npx prisma db push`, matching this project's solo-dev iteration speed.
 
 Everything keyed by `studentId` from day one — multi-kid ready.
 
@@ -92,8 +99,10 @@ Everything keyed by `studentId` from day one — multi-kid ready.
    - Environment variables (Amplify → App settings → Environment variables):
      - `DATABASE_URL` (Neon connection string)
      - `ANTHROPIC_API_KEY`
-     - `PARENT_PIN_HASH` (bcrypt hash of your PIN)
-     - `SES_FROM_EMAIL`, `PARENT_EMAIL`
+     - `PARENT_PIN_HASH_B64` (base64 of the bcrypt hash of your PIN — base64
+       because Next.js's env loader mangles literal `$` characters in bcrypt hashes)
+     - `JOB_SECRET` (shared secret for the `X-Job-Secret` header on `/api/jobs/*`)
+     - `SES_FROM_EMAIL`, `PARENT_EMAIL` (unused until the Phase 3 email work ships)
    - Every git push now auto-deploys. Amplify gives you an https URL immediately;
      add a custom domain later if you want (Amplify → Domain management).
 
@@ -130,10 +139,10 @@ Total: under $5/month.
 
 ## 5. Phase Plan
 
-### Phase 1 — Playable skeleton (goal: Smaya uses it this week)
+### Phase 1 — Playable skeleton (goal: Smaya uses it this week) ✅ Done
 Build:
 - Project scaffold: Next.js + TS + Tailwind + Prisma + Neon connection.
-- Load `fractions-chapter-config.json` into the Chapter table via seed script.
+- Load `data/chapters/fractions.json` into the Chapter table via seed script.
 - Generation module: fills the prompt template, calls Claude, parses JSON,
   runs math.js verification + structural checks, shuffles options, saves
   Problems. Expose as `POST /api/jobs/generate` (secret header).
@@ -145,26 +154,45 @@ Build:
 Acceptance: generate a 10-problem session with zero unverified problems;
 Smaya completes it on a tablet over the deployed URL.
 
-### Phase 2 — Adaptive engine + learning loop
+### Phase 2 — Adaptive engine + learning loop ✅ Done
 Build:
 - Elo per subtopic updated on every attempt (weight by difficulty + time
   vs. target). Level-up/level-down rules from the chapter config.
 - Batch spec builder: 60% weakest / 20% review / 20% stretch mix.
 - Wrong-answer flow: Socratic hint (live AI call) → worked solution →
   retry problem with new numbers. Retry correctness tracked separately.
-- Nightly EventBridge job wired up (generation becomes automatic).
+- Kid-friendly `/play` redesign: sounds, confetti, streak flame, silly
+  correct-answer messages, level-up/down banner.
 Acceptance: after a week of sessions, levels and Elo visibly move, and
 wrong answers always route through hint → solution → retry.
+Not done: the nightly EventBridge batch job itself (2am SGT pre-generation)
+was never deployed as real AWS infra — `getOrCreateTodaySession` generates
+lazily on first `/play` visit of the day instead, filling any shortfall from
+the bank on demand. Functionally equivalent from Smaya's side (she never
+waits on more than a bank shortfall), just not "ahead of time."
 
-### Phase 3 — Parent dashboard + reports
-Build:
-- `/parent` dashboard: mastery bars per subtopic, accuracy & speed trend
-  lines, streak, misconception frequency table (with plain-language names),
-  session history drill-down.
-- Daily email (session summary) + weekly email (AI-written letter using the
-  weekly-report prompt) via SES on schedule.
+### Phase 3 — Parent dashboard + reports (in progress)
+Done:
+- `/parent` dashboard rewrite: wrong attempts show the actual question,
+  chosen vs. correct answer, and the misconception's plain-language
+  name/description (not just an `M3`/`M8` code); retries are labeled against
+  the question they retried instead of being flattened into the count.
+- Filters: session (latest / all recent / a specific past session), concept
+  (subtopic), and wrong-only — combine freely, default view is latest session.
+- "Concepts to work on" ranking: subtopics sorted by wrong-answer rate across
+  the last 30 sessions, with the top misconception per concept, clickable
+  into the concept filter.
+- Mastery bars per subtopic (Elo, via Recharts), accuracy & speed trend lines
+  over the last 14 completed sessions, day streak tile.
 - Parent controls: session length, active subtopics, difficulty ceiling,
-  speed targets on/off.
+  speed-targets-required-to-level-up toggle — editable from a Settings panel
+  on `/parent`, stored on the `Student` row, applied in `lib/session.ts`,
+  `/api/jobs/generate`, and the attempts route's level-change logic.
+Not done:
+- Daily email (session summary) + weekly email (AI-written letter using the
+  weekly-report prompt) via SES. Needs real AWS SES setup (verified
+  sender/recipient) before any code here can actually send something —
+  infra work, not just app code. `ParentReport` table exists, unused.
 Acceptance: you stop needing to open the database to know how she's doing.
 
 ### Phase 4 — Perks & motivation
@@ -173,8 +201,11 @@ Build:
   + streak milestones (reward effort and streaks, not only perfection).
 - Perk catalog you manage in `/parent`; Smaya sees a perk shop in `/play`,
   redeems, you approve → status "granted".
-- Small celebrations: streak flame, confetti on perfect, level-up moment.
+- ~~Small celebrations: streak flame, confetti on perfect, level-up moment.~~
+  Already shipped in Phase 2's kid-friendly redesign.
 Acceptance: Smaya asks to do her session without being told. (The real test.)
+Not started: `Perk`/`PointsLedger`/`Redemption` tables exist in the schema but
+have no points-awarding logic or shop UI behind them yet.
 
 ### Phase 5 — Extensibility & free input
 Build:

@@ -50,12 +50,17 @@ export async function POST(
   );
 
   const student = await prisma.student.findUniqueOrThrow({ where: { id: session.studentId } });
-  const levelChange = await checkLevelChange(session.studentId, student.currentLevel, speedTarget);
+  const levelUpSpeedTarget = student.speedTargetsEnabled ? speedTarget : Infinity;
+  const levelChange = await checkLevelChange(session.studentId, student.currentLevel, levelUpSpeedTarget);
+  const maxLevel = Math.min(
+    config.difficulty_ladder.length,
+    student.difficultyCeiling ?? config.difficulty_ladder.length
+  );
   const newLevel = await applyLevelChange(
     session.studentId,
     student.currentLevel,
     levelChange,
-    config.difficulty_ladder.length
+    maxLevel
   );
 
   if (correct) {

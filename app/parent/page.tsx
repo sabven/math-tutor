@@ -1,6 +1,6 @@
 import { isParentAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { loginAction, logoutAction } from "./actions";
+import { loginAction, logoutAction, updateSettingsAction } from "./actions";
 import type { ChapterConfig } from "@/lib/generation";
 import type { StoredOption } from "@/lib/hintRetry";
 import { localDateString } from "@/lib/date";
@@ -44,10 +44,22 @@ function misconceptionInfo(config: ChapterConfig | undefined, id: string | null)
 export default async function ParentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; session?: string; subtopic?: string; show?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    session?: string;
+    subtopic?: string;
+    show?: string;
+    settingsError?: string;
+  }>;
 }) {
   const authed = await isParentAuthenticated();
-  const { error, session: sessionParam, subtopic: subtopicParam, show } = await searchParams;
+  const {
+    error,
+    session: sessionParam,
+    subtopic: subtopicParam,
+    show,
+    settingsError,
+  } = await searchParams;
 
   if (!authed) {
     return (
@@ -81,25 +93,22 @@ export default async function ParentPage({
     take: 30,
   });
 
-  const chapterIds = Array.from(
-    new Set(sessions.flatMap((s) => s.attempts.map((a) => a.problem.chapterId)))
-  );
-  const chapters = await prisma.chapter.findMany({ where: { id: { in: chapterIds } } });
+  const chapters = await prisma.chapter.findMany({ where: { active: true } });
   const configByChapter = new Map(
     chapters.map((c) => [c.id, c.config as unknown as ChapterConfig])
   );
 
-  // All known subtopics across every chapter touched by these sessions, for the concept filter.
+  // All known subtopics across every active chapter, for the concept filter and settings.
   const allSubtopics = new Map<string, string>();
   for (const config of configByChapter.values()) {
     for (const st of config.subtopics) allSubtopics.set(st.id, st.name);
   }
 
-  const studentId = sessions[0]?.studentId;
+  const student = await prisma.student.findFirst();
   const primaryConfig = configByChapter.get("fractions") ?? Array.from(configByChapter.values())[0];
 
-  const skillScores = studentId
-    ? await prisma.skillScore.findMany({ where: { studentId } })
+  const skillScores = student
+    ? await prisma.skillScore.findMany({ where: { studentId: student.id } })
     : [];
   const eloBySubtopic = new Map(skillScores.map((s) => [s.subtopicId, s.elo]));
   const masteryData = primaryConfig
@@ -195,6 +204,82 @@ export default async function ParentPage({
           <button className="text-sm text-neutral-500 underline">Log out</button>
         </form>
       </div>
+
+      {primaryConfig && (
+        <details className="mb-6 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Settings</summary>
+          <form action={updateSettingsAction} className="mt-4 flex flex-col gap-4 text-sm max-w-md">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-neutral-500">Session length (problems)</span>
+              <input
+                type="number"
+                name="sessionLength"
+                min={1}
+                max={50}
+                defaultValue={student?.sessionLength ?? undefined}
+                placeholder={String(primaryConfig.session_defaults.problems_per_session)}
+                className="border rounded px-2 py-1 bg-transparent w-32"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-neutral-500">Difficulty ceiling</span>
+              <select
+                name="difficultyCeiling"
+                defaultValue={student?.difficultyCeiling ? String(student.difficultyCeiling) : ""}
+                className="border rounded px-2 py-1 bg-transparent w-56"
+              >
+                <option value="">No ceiling (full ladder)</option>
+                {primaryConfig.difficulty_ladder.map((rung) => (
+                  <option key={rung.level} value={rung.level}>
+                    Level {rung.level}
+                    {rung.label ? ` — ${rung.label}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="speedTargetsEnabled"
+                defaultChecked={student?.speedTargetsEnabled ?? true}
+              />
+              <span>Require speed targets for leveling up</span>
+            </label>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-neutral-500">Active concepts</span>
+              <div className="grid grid-cols-2 gap-1">
+                {primaryConfig.subtopics.map((st) => {
+                  const activeIds = student?.activeSubtopicIds as string[] | null | undefined;
+                  const isActive = !activeIds || activeIds.includes(st.id);
+                  return (
+                    <label key={st.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        name="subtopic"
+                        value={st.id}
+                        defaultChecked={isActive}
+                      />
+                      <input type="hidden" name="allSubtopic" value={st.id} />
+                      {st.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {settingsError && (
+              <p className="text-red-600 text-xs">Select at least one active concept.</p>
+            )}
+
+            <button type="submit" className="self-start bg-blue-600 text-white rounded px-4 py-1.5">
+              Save settings
+            </button>
+          </form>
+        </details>
+      )}
 
       <div className="mb-6 grid grid-cols-3 sm:grid-cols-4 gap-3">
         <div className="col-span-1 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 flex flex-col items-center justify-center text-center">

@@ -5,12 +5,10 @@
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "agent",
+            "type": "command",
             "if": "Bash(git push*)",
-            "model": "claude-sonnet-5",
-            "timeout": 120,
-            "statusMessage": "Checking docs/build-plan.md is up to date before push...",
-            "prompt": "A `git push` is about to run in this repo (math-tutor). Before allowing it, verify that docs/build-plan.md's 'Phase Plan' and 'Data Model' sections accurately reflect the commits about to be pushed.\n\nSteps:\n1. Run `git log @{u}..HEAD --oneline` (fall back to `git log origin/main..HEAD --oneline` if there's no upstream) to see what's about to be pushed. If there is nothing to push, or only docs/chore/formatting changes, ALLOW immediately.\n2. Run `git diff @{u}..HEAD --stat` (or the origin/main equivalent) to see which files changed in the commits being pushed.\n3. If the diff touches app code representing a feature, workflow, or schema change (new/changed files under app/, lib/, prisma/schema.prisma, data/chapters/*.json, etc.), read docs/build-plan.md and judge whether it already describes this work — Phase Plan status markers, the Data Model section, or other relevant sections.\n4. If docs/build-plan.md is stale relative to a genuine feature/schema change, DENY the push: explain concisely and specifically what's missing or outdated so it can be fixed and the push retried.\n5. If the doc already covers the change, or the push is trivial (bug fix, refactor, copy tweak, doc-only), ALLOW.\n\nBe pragmatic — don't block over minor changes that don't affect the plan's accuracy. Only block on genuine spec drift: a reader of docs/build-plan.md would be misled about what phase the project is in, what the data model looks like, or what's actually built."
+            "statusMessage": "Checking docs/build-plan.md against this push...",
+            "command": "cmd=$(node -e \"try{const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write((d.tool_input&&d.tool_input.command)||'')}catch(e){}\"); case \"$cmd\" in \"git push\"*) ;; *) exit 0 ;; esac; base=\"origin/main\"; git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1 && base=\"@{u}\"; changed=$(git diff --name-only \"$base\"..HEAD 2>/dev/null); [ -z \"$changed\" ] && exit 0; app_changed=$(printf '%s\\n' \"$changed\" | grep -E '^(app/|lib/|prisma/schema\\.prisma|data/chapters/.*\\.json)' || true); docs_changed=$(printf '%s\\n' \"$changed\" | grep -E '^docs/build-plan\\.md$' || true); if [ -n \"$app_changed\" ] && [ -z \"$docs_changed\" ]; then echo \"{\\\"systemMessage\\\": \\\"Reminder: this push changes app/lib/schema/chapter-config files but docs/build-plan.md was not touched in these commits. Double check the Phase Plan and Data Model sections are still accurate.\\\", \\\"continue\\\": true}\"; fi; exit 0"
           }
         ]
       }

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { startOfDay, endOfDay } from "./date";
 import {
   buildAdaptiveBatchSpec,
   buildStudentState,
@@ -7,24 +8,6 @@ import {
   BatchSpecEntry,
   ChapterConfig,
 } from "./generation";
-
-// The family is in Singapore (UTC+8, no DST). "Today" must be computed in
-// their local calendar day, not the server's (AWS Lambda defaults to UTC) —
-// otherwise the app keeps reusing the previous day's session for a chunk of
-// every Singapore day.
-const STUDENT_TIMEZONE = "Asia/Singapore";
-
-function localDateString(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: STUDENT_TIMEZONE }).format(date);
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(`${localDateString(date)}T00:00:00+08:00`);
-}
-
-function endOfDay(date: Date): Date {
-  return new Date(`${localDateString(date)}T23:59:59.999+08:00`);
-}
 
 /**
  * Pulls unused verified problems matching each batch spec entry's exact

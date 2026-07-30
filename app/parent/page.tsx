@@ -3,6 +3,34 @@ import { prisma } from "@/lib/prisma";
 import { loginAction, logoutAction } from "./actions";
 import type { ChapterConfig } from "@/lib/generation";
 import type { StoredOption } from "@/lib/hintRetry";
+import { localDateString } from "@/lib/date";
+import { AccuracyTrendChart, MasteryBarChart, SpeedTrendChart } from "./ProgressCharts";
+
+function toEpochDay(localDateStr: string): number {
+  return Math.floor(new Date(`${localDateStr}T00:00:00+08:00`).getTime() / 86400000);
+}
+
+// Consecutive-day streak of completed sessions, ending at today or yesterday
+// (a day not yet started doesn't break the streak, but a real gap does).
+function computeStreak(completedDatesDesc: string[]): number {
+  if (completedDatesDesc.length === 0) return 0;
+  const todayDay = toEpochDay(localDateString(new Date()));
+  const mostRecentDay = toEpochDay(completedDatesDesc[0]);
+  if (todayDay - mostRecentDay > 1) return 0;
+
+  let streak = 1;
+  let cursor = mostRecentDay;
+  for (let i = 1; i < completedDatesDesc.length; i++) {
+    const day = toEpochDay(completedDatesDesc[i]);
+    if (cursor - day === 1) {
+      streak += 1;
+      cursor = day;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
 
 function subtopicName(config: ChapterConfig | undefined, id: string): string {
   return config?.subtopics.find((s) => s.id === id)?.name ?? id;
@@ -66,6 +94,38 @@ export default async function ParentPage({
   for (const config of configByChapter.values()) {
     for (const st of config.subtopics) allSubtopics.set(st.id, st.name);
   }
+
+  const studentId = sessions[0]?.studentId;
+  const primaryConfig = configByChapter.get("fractions") ?? Array.from(configByChapter.values())[0];
+
+  const skillScores = studentId
+    ? await prisma.skillScore.findMany({ where: { studentId } })
+    : [];
+  const eloBySubtopic = new Map(skillScores.map((s) => [s.subtopicId, s.elo]));
+  const masteryData = primaryConfig
+    ? primaryConfig.subtopics.map((st) => ({
+        subtopicId: st.id,
+        name: st.name,
+        elo: eloBySubtopic.get(st.id) ?? 1000,
+      }))
+    : [];
+
+  const completedSessions = sessions.filter((s) => s.status === "complete");
+  const completedDatesDesc = Array.from(
+    new Set(completedSessions.map((s) => localDateString(s.date)))
+  ).sort((a, b) => (a < b ? 1 : -1));
+  const streak = computeStreak(completedDatesDesc);
+
+  const trendData = completedSessions
+    .slice(0, 14)
+    .slice()
+    .reverse()
+    .map((s) => ({
+      sessionId: s.id,
+      label: new Date(s.date).toLocaleDateString("en-SG", { month: "short", day: "numeric" }),
+      accuracyPct: s.attempts.length > 0 ? Math.round(((s.score ?? 0) / s.attempts.length) * 100) : 0,
+      medianSeconds: s.medianSeconds,
+    }));
 
   // Weak-concept ranking: aggregate every attempt in the fetched window,
   // regardless of which session/filter is currently selected, so "what does
@@ -135,6 +195,34 @@ export default async function ParentPage({
           <button className="text-sm text-neutral-500 underline">Log out</button>
         </form>
       </div>
+
+      <div className="mb-6 grid grid-cols-3 sm:grid-cols-4 gap-3">
+        <div className="col-span-1 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 flex flex-col items-center justify-center text-center">
+          <span className="text-3xl font-bold">
+            {streak > 0 ? `🔥 ${streak}` : "—"}
+          </span>
+          <span className="text-xs text-neutral-500 mt-1">day streak</span>
+        </div>
+        {masteryData.length > 0 && (
+          <div className="col-span-3 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <h2 className="text-sm font-semibold mb-3">Mastery by concept</h2>
+            <MasteryBarChart data={masteryData} />
+          </div>
+        )}
+      </div>
+
+      {trendData.length > 0 && (
+        <div className="mb-6 grid sm:grid-cols-2 gap-3">
+          <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <h2 className="text-sm font-semibold mb-2">Accuracy trend</h2>
+            <AccuracyTrendChart data={trendData} />
+          </div>
+          <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+            <h2 className="text-sm font-semibold mb-2">Speed trend</h2>
+            <SpeedTrendChart data={trendData} />
+          </div>
+        </div>
+      )}
 
       {weakConcepts.length > 0 && (
         <div className="mb-6 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4">

@@ -68,3 +68,49 @@ export async function updateSettingsAction(formData: FormData) {
 
   redirect("/parent");
 }
+
+export async function addPerkAction(formData: FormData) {
+  if (!(await isParentAuthenticated())) {
+    redirect("/parent");
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const pointCost = parseInt(String(formData.get("pointCost") ?? ""), 10);
+  const icon = String(formData.get("icon") ?? "").trim();
+
+  if (!name || !Number.isFinite(pointCost) || pointCost <= 0) {
+    redirect("/parent?perkError=1");
+  }
+
+  await prisma.perk.create({
+    data: { name, pointCost, icon: icon || null },
+  });
+
+  redirect("/parent");
+}
+
+export async function togglePerkAction(formData: FormData) {
+  if (!(await isParentAuthenticated())) {
+    redirect("/parent");
+  }
+
+  const perkId = String(formData.get("perkId") ?? "");
+  const perk = await prisma.perk.findUniqueOrThrow({ where: { id: perkId } });
+  await prisma.perk.update({ where: { id: perkId }, data: { active: !perk.active } });
+
+  redirect("/parent");
+}
+
+export async function grantRedemptionAction(formData: FormData) {
+  if (!(await isParentAuthenticated())) {
+    redirect("/parent");
+  }
+
+  const redemptionId = String(formData.get("redemptionId") ?? "");
+  await prisma.redemption.update({
+    where: { id: redemptionId },
+    data: { status: "granted" },
+  });
+
+  redirect("/parent");
+}

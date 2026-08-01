@@ -1,10 +1,18 @@
 import Link from "next/link";
 import { isParentAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { loginAction, logoutAction, updateSettingsAction } from "./actions";
+import {
+  loginAction,
+  logoutAction,
+  updateSettingsAction,
+  addPerkAction,
+  togglePerkAction,
+  grantRedemptionAction,
+} from "./actions";
 import type { ChapterConfig } from "@/lib/generation";
 import type { StoredOption } from "@/lib/hintRetry";
 import { localDateString } from "@/lib/date";
+import { getPointsBalance } from "@/lib/points";
 import { AccuracyTrendChart, MasteryBarChart, SpeedTrendChart } from "./ProgressCharts";
 
 function toEpochDay(localDateStr: string): number {
@@ -113,6 +121,18 @@ export default async function ParentPage({
 
   const student = await prisma.student.findFirst();
   const primaryConfig = configByChapter.get("fractions") ?? Array.from(configByChapter.values())[0];
+
+  const [perks, pendingRedemptions, pointsBalance] = student
+    ? await Promise.all([
+        prisma.perk.findMany({ orderBy: { pointCost: "asc" } }),
+        prisma.redemption.findMany({
+          where: { studentId: student.id, status: "pending" },
+          orderBy: { createdAt: "asc" },
+          include: { perk: true },
+        }),
+        getPointsBalance(student.id),
+      ])
+    : [[], [], 0];
 
   const skillScores = student
     ? await prisma.skillScore.findMany({ where: { studentId: student.id } })
@@ -291,6 +311,101 @@ export default async function ParentPage({
               Save settings
             </button>
           </form>
+        </details>
+      )}
+
+      {student && (
+        <details className="mb-6 rounded-lg border border-neutral-200 dark:border-neutral-800 p-4">
+          <summary className="cursor-pointer text-sm font-semibold">
+            Perks & Points ({pointsBalance} points
+            {pendingRedemptions.length > 0
+              ? ` · ${pendingRedemptions.length} pending`
+              : ""}
+            )
+          </summary>
+
+          <div className="mt-4 space-y-6">
+            {pendingRedemptions.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-neutral-500 mb-2">
+                  Pending redemptions
+                </h3>
+                <div className="space-y-2">
+                  {pendingRedemptions.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-3 py-2 text-sm"
+                    >
+                      <span>
+                        {r.perk.icon ?? "🎁"} {r.perk.name}{" "}
+                        <span className="text-neutral-500">— {r.perk.pointCost} pts</span>
+                      </span>
+                      <form action={grantRedemptionAction}>
+                        <input type="hidden" name="redemptionId" value={r.id} />
+                        <button
+                          type="submit"
+                          className="text-xs font-semibold bg-emerald-600 text-white rounded-full px-3 py-1"
+                        >
+                          Grant
+                        </button>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-xs font-semibold text-neutral-500 mb-2">Perk catalog</h3>
+              <div className="space-y-1">
+                {perks.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between text-sm py-1">
+                    <span className={p.active ? "" : "text-neutral-400 line-through"}>
+                      {p.icon ?? "🎁"} {p.name} — {p.pointCost} pts
+                    </span>
+                    <form action={togglePerkAction}>
+                      <input type="hidden" name="perkId" value={p.id} />
+                      <button type="submit" className="text-xs text-neutral-500 underline">
+                        {p.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </form>
+                  </div>
+                ))}
+                {perks.length === 0 && (
+                  <p className="text-sm text-neutral-500">No perks yet — add one below.</p>
+                )}
+              </div>
+            </div>
+
+            <form action={addPerkAction} className="flex flex-wrap items-end gap-3 text-sm">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-neutral-500">Name</label>
+                <input
+                  name="name"
+                  required
+                  placeholder="30 min extra screen time"
+                  className="border rounded px-2 py-1 bg-transparent w-56"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-neutral-500">Cost (points)</label>
+                <input
+                  type="number"
+                  name="pointCost"
+                  min={1}
+                  required
+                  className="border rounded px-2 py-1 bg-transparent w-24"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-neutral-500">Icon (emoji, optional)</label>
+                <input name="icon" placeholder="🎮" className="border rounded px-2 py-1 bg-transparent w-16" />
+              </div>
+              <button type="submit" className="bg-blue-600 text-white rounded px-4 py-1.5">
+                Add perk
+              </button>
+            </form>
+          </div>
         </details>
       )}
 

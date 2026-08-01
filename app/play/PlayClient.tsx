@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { BlockMath } from "react-katex";
 import { ConfettiBurst } from "./ConfettiBurst";
 import { playCorrectSound, playPerfectFanfare, playWrongSound } from "@/lib/sound";
@@ -155,6 +156,8 @@ export function PlayClient({
   const [startingNewSession, setStartingNewSession] = useState(false);
   const [showHomeConfirm, setShowHomeConfirm] = useState(false);
   const [leavingHome, setLeavingHome] = useState(false);
+  const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
+  const [pointsBalance, setPointsBalance] = useState<number | null>(null);
 
   const problem = problemList[index];
 
@@ -285,11 +288,14 @@ export function PlayClient({
     const medianSeconds = times.length ? times[Math.floor(times.length / 2)] : 0;
     const perfect = correctCount === problemList.length;
 
-    await fetch(`/api/sessions/${sessionId}/complete`, {
+    const res = await fetch(`/api/sessions/${sessionId}/complete`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ score: correctCount, medianSeconds, perfect }),
     });
+    const data = await res.json();
+    setPointsAwarded(data.pointsAwarded ?? null);
+    setPointsBalance(data.pointsBalance ?? null);
 
     if (perfect) {
       playPerfectFanfare();
@@ -322,13 +328,26 @@ export function PlayClient({
         <p className="text-xl text-neutral-700 dark:text-neutral-200">
           {correctCount} / {problemList.length} correct
         </p>
-        <button
-          onClick={playAgain}
-          disabled={startingNewSession}
-          className="font-fun mt-2 px-8 py-3 rounded-full bg-purple-600 text-white font-semibold text-lg shadow-lg shadow-purple-300 dark:shadow-purple-950 hover:bg-purple-700 active:scale-95 transition-all disabled:opacity-60"
-        >
-          {startingNewSession ? "Getting new questions…" : "Play again 🔁"}
-        </button>
+        {pointsAwarded !== null && pointsAwarded > 0 && (
+          <p className="font-fun text-lg font-semibold text-amber-500 animate-pop-in">
+            +{pointsAwarded} points! ✨ ({pointsBalance} total)
+          </p>
+        )}
+        <div className="flex gap-3">
+          <button
+            onClick={playAgain}
+            disabled={startingNewSession}
+            className="font-fun mt-2 px-8 py-3 rounded-full bg-purple-600 text-white font-semibold text-lg shadow-lg shadow-purple-300 dark:shadow-purple-950 hover:bg-purple-700 active:scale-95 transition-all disabled:opacity-60"
+          >
+            {startingNewSession ? "Getting new questions…" : "Play again 🔁"}
+          </button>
+          <Link
+            href="/play/shop"
+            className="font-fun mt-2 px-8 py-3 rounded-full bg-amber-500 text-white font-semibold text-lg shadow-lg hover:bg-amber-600 active:scale-95 transition-all flex items-center"
+          >
+            Shop 🎁
+          </Link>
+        </div>
       </main>
     );
   }

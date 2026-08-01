@@ -31,6 +31,20 @@ async function main() {
   } else {
     console.log(`Student already exists: ${student.name} (${student.id})`);
   }
+
+  const starterPerks = [
+    { name: "Pick tonight's dinner", pointCost: 50, icon: "🍽️" },
+    { name: "30 min extra screen time", pointCost: 75, icon: "📱" },
+    { name: "Stay up 30 min late", pointCost: 100, icon: "🌙" },
+    { name: "Ice cream trip", pointCost: 250, icon: "🍦" },
+  ];
+  for (const perk of starterPerks) {
+    const existing = await prisma.perk.findFirst({ where: { name: perk.name } });
+    if (!existing) {
+      await prisma.perk.create({ data: perk });
+      console.log(`Seeded perk: ${perk.name}`);
+    }
+  }
 }
 
 main()

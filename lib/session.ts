@@ -21,6 +21,10 @@ async function fillBatchFromBank(
   batchSpec: BatchSpecEntry[]
 ): Promise<Awaited<ReturnType<typeof prisma.problem.findMany>>> {
   const picked: Awaited<ReturnType<typeof prisma.problem.findMany>> = [];
+  // Picked rows aren't marked usedAt until the whole batch is finalized, so
+  // without this, a shortfall re-query could hand back the same row a
+  // preceding iteration already picked for a different entry.
+  const pickedIds = new Set<string>();
   const shortfall: BatchSpecEntry[] = [];
 
   for (const entry of batchSpec) {
@@ -31,11 +35,13 @@ async function fillBatchFromBank(
         level: entry.level,
         verified: true,
         usedAt: null,
+        id: { notIn: Array.from(pickedIds) },
       },
       orderBy: { createdAt: "asc" },
       take: entry.count,
     });
     picked.push(...available);
+    available.forEach((p) => pickedIds.add(p.id));
     if (available.length < entry.count) {
       shortfall.push({ ...entry, count: entry.count - available.length });
     }
@@ -56,11 +62,13 @@ async function fillBatchFromBank(
           level: entry.level,
           verified: true,
           usedAt: null,
+          id: { notIn: Array.from(pickedIds) },
         },
         orderBy: { createdAt: "asc" },
         take: entry.count,
       });
       picked.push(...fresh);
+      fresh.forEach((p) => pickedIds.add(p.id));
     }
   }
 

@@ -215,17 +215,28 @@ Not done:
   infra work, not just app code. `ParentReport` table exists, unused.
 Acceptance: you stop needing to open the database to know how she's doing.
 
-### Phase 4 — Perks & motivation
+### Phase 4 — Perks & motivation ✅ Done
 Build:
-- Points: completion points + perfect-score bonus + beat-speed-target bonus
-  + streak milestones (reward effort and streaks, not only perfection).
-- Perk catalog you manage in `/parent`; Smaya sees a perk shop in `/play`,
-  redeems, you approve → status "granted".
+- Points (`lib/points.ts`, awarded on session completion): 2 pts/correct
+  answer (rewards effort even on an imperfect or early-quit session), +20
+  perfect-score bonus, +10 beat-speed-target bonus, and one-time streak
+  milestones (3/7/14/30 days → 25/75/150/400 pts). Each award is its own
+  `PointsLedger` row (`reason` describes what earned it); balance is the
+  sum. Spending a perk writes a matching negative row instead of a
+  separate balance field, so the ledger is the single source of truth.
+- Perk catalog managed in `/parent` (add/deactivate, `Perk` table) with a
+  few starter perks seeded (`prisma/seed.ts`); Smaya redeems from a shop at
+  `/play/shop` (`POST /api/redemptions`, balance-checked, creates a
+  `pending` `Redemption`); you grant it from `/parent` → status `granted`.
+  No "deny" flow — the schema only has pending/granted.
 - ~~Small celebrations: streak flame, confetti on perfect, level-up moment.~~
   Already shipped in Phase 2's kid-friendly redesign.
 Acceptance: Smaya asks to do her session without being told. (The real test.)
-Not started: `Perk`/`PointsLedger`/`Redemption` tables exist in the schema but
-have no points-awarding logic or shop UI behind them yet.
+Found and fixed along the way: `fillBatchFromBank` (`lib/session.ts`) could
+pick the same problem twice into one session when a generation shortfall
+re-queried the bank, since already-picked rows aren't marked `usedAt` until
+the whole batch is finalized — now excludes ids already picked earlier in
+the same fill.
 
 ### Phase 5 — Extensibility & free input
 Build:

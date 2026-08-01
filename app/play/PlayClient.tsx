@@ -26,7 +26,7 @@ interface AttemptRecord {
   seconds: number;
 }
 
-type Phase = "unanswered" | "correct" | "hint" | "solution";
+type Phase = "unanswered" | "correct" | "hint" | "solution" | "stale";
 
 const CORRECT_MESSAGES = [
   "Fraction ninja! 🥷",
@@ -189,6 +189,12 @@ export function PlayClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ problemId: problem.id, chosenOptionIdx: optionIdx, seconds }),
     });
+
+    if (res.status === 410) {
+      setPhase("stale");
+      return;
+    }
+
     const data = await res.json();
     setCorrectIdx(data.correctIdx);
     setRecords((prev) => [...prev, { correct: data.correct, seconds }]);
@@ -341,6 +347,23 @@ export function PlayClient({
           );
         })}
       </div>
+
+      {phase === "stale" && (
+        <div className="w-full rounded-2xl bg-sky-50 dark:bg-sky-950/40 border-2 border-sky-300 dark:border-sky-700 px-5 py-4 animate-pop-in text-center">
+          <p className="font-fun text-sky-700 dark:text-sky-300 font-semibold mb-2">
+            This session already finished! 🎉
+          </p>
+          <p className="text-neutral-700 dark:text-neutral-200 mb-3">
+            Looks like this page has been open a while. Let&apos;s get you a fresh set of problems.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="font-fun px-8 py-3 rounded-full bg-sky-600 text-white font-semibold text-lg shadow-lg hover:bg-sky-700 active:scale-95 transition-all"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
 
       {phase === "correct" && feedbackMessage && (
         <p className="font-fun text-lg font-semibold animate-pop-in text-emerald-600 dark:text-emerald-400">

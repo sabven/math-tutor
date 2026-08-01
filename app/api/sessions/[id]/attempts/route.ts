@@ -20,6 +20,14 @@ export async function POST(
     prisma.problem.findUniqueOrThrow({ where: { id: problemId } }),
     prisma.session.findUniqueOrThrow({ where: { id: sessionId } }),
   ]);
+
+  // A stale browser tab left open across a day boundary can still hold an
+  // already-finished session in memory and try to keep posting answers to
+  // it. Reject those instead of silently recording replay data.
+  if (session.status === "complete") {
+    return NextResponse.json({ error: "session_ended" }, { status: 410 });
+  }
+
   const options = problem.options as unknown as StoredOption[];
   const chosen = options[chosenOptionIdx];
   const correctIdx = options.findIndex((o) => o.is_correct);

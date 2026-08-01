@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { isParentAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { loginAction, logoutAction, updateSettingsAction } from "./actions";
@@ -64,6 +65,12 @@ export default async function ParentPage({
   if (!authed) {
     return (
       <main className="flex-1 flex items-center justify-center p-8">
+        <Link
+          href="/"
+          className="fixed top-4 left-4 z-50 rounded-full border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 px-4 py-2 text-sm font-medium bg-white dark:bg-neutral-900 shadow hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+        >
+          ← Home
+        </Link>
         <form action={loginAction} className="flex flex-col gap-3 w-full max-w-xs">
           <h1 className="text-xl font-semibold text-center">Parent Login</h1>
           <input
@@ -198,7 +205,13 @@ export default async function ParentPage({
 
   return (
     <main className="flex-1 p-6 max-w-4xl mx-auto w-full">
-      <div className="flex justify-between items-center mb-6">
+      <Link
+        href="/"
+        className="fixed top-4 left-4 z-50 rounded-full border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 px-4 py-2 text-sm font-medium bg-white dark:bg-neutral-900 shadow hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+      >
+        ← Home
+      </Link>
+      <div className="flex justify-between items-center mb-6 pl-28">
         <h1 className="text-2xl font-bold">Parent Dashboard</h1>
         <form action={logoutAction}>
           <button className="text-sm text-neutral-500 underline">Log out</button>

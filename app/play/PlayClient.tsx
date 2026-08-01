@@ -82,6 +82,18 @@ function ShapeIcon({ shape }: { shape: Shape }) {
   }
 }
 
+function HomeButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Go home"
+      className="fixed top-4 left-4 z-50 flex items-center gap-1.5 rounded-full bg-white/90 dark:bg-neutral-900/90 text-purple-700 dark:text-purple-200 px-4 py-2 text-sm font-semibold shadow-lg hover:bg-white dark:hover:bg-neutral-900 active:scale-95 transition-all"
+    >
+      🏠 Home
+    </button>
+  );
+}
+
 function ProgressTrail({
   total,
   currentIndex,
@@ -141,6 +153,8 @@ export function PlayClient({
   const [shake, setShake] = useState(false);
   const [levelBanner, setLevelBanner] = useState<string | null>(null);
   const [startingNewSession, setStartingNewSession] = useState(false);
+  const [showHomeConfirm, setShowHomeConfirm] = useState(false);
+  const [leavingHome, setLeavingHome] = useState(false);
 
   const problem = problemList[index];
 
@@ -170,9 +184,37 @@ export function PlayClient({
     return () => clearTimeout(t);
   }, [levelBanner]);
 
+  function goHome() {
+    window.location.href = "/";
+  }
+
+  async function stopSessionAndGoHome() {
+    setLeavingHome(true);
+    const correctCount = records.filter((r) => r.correct).length;
+    const times = [...records.map((r) => r.seconds)].sort((a, b) => a - b);
+    const medianSeconds = times.length ? times[Math.floor(times.length / 2)] : 0;
+    const perfect = correctCount === problemList.length;
+
+    await fetch(`/api/sessions/${sessionId}/complete`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score: correctCount, medianSeconds, perfect }),
+    });
+    goHome();
+  }
+
+  function handleHomeClick() {
+    if (records.length < problemList.length) {
+      setShowHomeConfirm(true);
+    } else {
+      stopSessionAndGoHome();
+    }
+  }
+
   if (!problemList.length) {
     return (
       <main className="flex-1 flex items-center justify-center p-8 bg-gradient-to-br from-sky-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-950">
+        <HomeButton onClick={goHome} />
         <p className="text-lg text-neutral-500 dark:text-neutral-400">
           No problems available yet. Ask a parent to generate today&apos;s session.
         </p>
@@ -268,6 +310,7 @@ export function PlayClient({
     const stars = correctCount === problemList.length ? 3 : correctCount >= problemList.length * 0.7 ? 2 : 1;
     return (
       <main className="flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center bg-gradient-to-br from-sky-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-950">
+        <HomeButton onClick={goHome} />
         <ConfettiBurst trigger={confettiTrigger} count={perfect ? 60 : 24} />
         <div className="text-6xl animate-wiggle-in">
           {"⭐".repeat(stars)}
@@ -296,7 +339,37 @@ export function PlayClient({
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center gap-6 p-6 max-w-2xl mx-auto w-full bg-gradient-to-br from-sky-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-950">
+      <HomeButton onClick={handleHomeClick} />
       <ConfettiBurst trigger={confettiTrigger} />
+
+      {showHomeConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-neutral-900 shadow-xl p-6 text-center">
+            <p className="font-fun text-lg font-semibold text-purple-700 dark:text-purple-200 mb-2">
+              Wait, you&apos;re not done yet!
+            </p>
+            <p className="text-neutral-700 dark:text-neutral-200 mb-5">
+              You&apos;ve answered {records.length} of {problemList.length} questions. Are you sure you
+              want to go home?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setShowHomeConfirm(false)}
+                className="font-fun px-6 py-2.5 rounded-full bg-purple-600 text-white font-semibold hover:bg-purple-700 active:scale-95 transition-all"
+              >
+                Keep playing
+              </button>
+              <button
+                onClick={stopSessionAndGoHome}
+                disabled={leavingHome}
+                className="px-6 py-2.5 rounded-full text-neutral-500 dark:text-neutral-400 font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60 transition-all"
+              >
+                {leavingHome ? "Leaving…" : "Yes, go home"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {levelBanner && (
         <div className="font-fun fixed top-4 left-1/2 -translate-x-1/2 z-50 rounded-full bg-purple-600 text-white px-5 py-2 text-sm font-semibold shadow-lg animate-pop-in">

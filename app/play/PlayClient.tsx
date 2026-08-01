@@ -140,6 +140,7 @@ export function PlayClient({
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [shake, setShake] = useState(false);
   const [levelBanner, setLevelBanner] = useState<string | null>(null);
+  const [startingNewSession, setStartingNewSession] = useState(false);
 
   const problem = problemList[index];
 
@@ -255,6 +256,12 @@ export function PlayClient({
     setDone(true);
   }
 
+  async function playAgain() {
+    setStartingNewSession(true);
+    await fetch("/api/sessions/new", { method: "POST" });
+    window.location.reload();
+  }
+
   if (done) {
     const correctCount = records.filter((r) => r.correct).length;
     const perfect = correctCount === problemList.length;
@@ -272,6 +279,13 @@ export function PlayClient({
         <p className="text-xl text-neutral-700 dark:text-neutral-200">
           {correctCount} / {problemList.length} correct
         </p>
+        <button
+          onClick={playAgain}
+          disabled={startingNewSession}
+          className="font-fun mt-2 px-8 py-3 rounded-full bg-purple-600 text-white font-semibold text-lg shadow-lg shadow-purple-300 dark:shadow-purple-950 hover:bg-purple-700 active:scale-95 transition-all disabled:opacity-60"
+        >
+          {startingNewSession ? "Getting new questions…" : "Play again 🔁"}
+        </button>
       </main>
     );
   }

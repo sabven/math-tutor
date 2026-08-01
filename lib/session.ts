@@ -67,30 +67,20 @@ async function fillBatchFromBank(
   return shuffle(picked);
 }
 
-export async function getOrCreateTodaySession(chapterId = "fractions") {
-  const student = await prisma.student.findFirstOrThrow();
+type StudentForSession = {
+  id: string;
+  currentLevel: number;
+  sessionLength: number | null;
+  activeSubtopicIds: unknown;
+};
+
+/**
+ * Builds and saves a brand-new session. Problems are pulled from the bank's
+ * unused pool (or freshly generated) and immediately marked usedAt, so a
+ * problem already served in any past session never gets picked again.
+ */
+async function generateNewSession(chapterId: string, student: StudentForSession) {
   const now = new Date();
-
-  const existing = await prisma.session.findFirst({
-    where: {
-      studentId: student.id,
-      date: { gte: startOfDay(now), lte: endOfDay(now) },
-      status: { in: ["pending", "active"] },
-    },
-    orderBy: { date: "desc" },
-  });
-
-  if (existing) {
-    const problemIds = existing.problemIds as string[];
-    const problems = await prisma.problem.findMany({
-      where: { id: { in: problemIds } },
-    });
-    const ordered = problemIds
-      .map((id) => problems.find((p) => p.id === id))
-      .filter((p): p is NonNullable<typeof p> => Boolean(p));
-    return { session: existing, problems: ordered };
-  }
-
   const chapter = await prisma.chapter.findUniqueOrThrow({ where: { id: chapterId } });
   const config = chapter.config as unknown as ChapterConfig;
   const batchSize = student.sessionLength ?? config.session_defaults.problems_per_session;
@@ -120,4 +110,38 @@ export async function getOrCreateTodaySession(chapterId = "fractions") {
   });
 
   return { session, problems };
+}
+
+export async function getOrCreateTodaySession(chapterId = "fractions") {
+  const student = await prisma.student.findFirstOrThrow();
+  const now = new Date();
+
+  const existing = await prisma.session.findFirst({
+    where: {
+      studentId: student.id,
+      date: { gte: startOfDay(now), lte: endOfDay(now) },
+      status: { in: ["pending", "active"] },
+    },
+    orderBy: { date: "desc" },
+  });
+
+  if (existing) {
+    const problemIds = existing.problemIds as string[];
+    const problems = await prisma.problem.findMany({
+      where: { id: { in: problemIds } },
+    });
+    const ordered = problemIds
+      .map((id) => problems.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p));
+    return { session: existing, problems: ordered };
+  }
+
+  return generateNewSession(chapterId, student);
+}
+
+// Always starts a fresh session, regardless of whether one already exists
+// for today — used by the "Play again" flow after a session is completed.
+export async function startNewSession(chapterId = "fractions") {
+  const student = await prisma.student.findFirstOrThrow();
+  return generateNewSession(chapterId, student);
 }

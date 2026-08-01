@@ -181,6 +181,15 @@ wrong answers always route through hint → solution → retry.
 `getOrCreateTodaySession` still generates lazily on first `/play` visit as a
 fallback if a nightly run is ever missed, so a skipped workflow run degrades
 gracefully rather than breaking anything.
+- Small `/play` UX additions since: a "Play again" button on the done screen
+  (`POST /api/sessions/new`, always builds a fresh session regardless of
+  today's existing one — no-repeat is free since problems are marked
+  `usedAt` on serve and the bank/generation pipeline only pulls `usedAt:
+  null`); a persistent Home button on `/play` and `/parent` (leaving
+  mid-session warns first, then marks the session complete with the
+  partial score); and a fix rejecting attempts posted against an
+  already-completed session (a stale tab left open past a day boundary
+  could otherwise replay old questions as if new).
 
 ### Phase 3 — Parent dashboard + reports (in progress)
 Done:

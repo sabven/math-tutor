@@ -62,15 +62,32 @@ export async function getPointsBalance(studentId: string): Promise<number> {
 }
 
 /**
- * Awards points for a just-completed session: a per-correct-answer base
- * (rewards effort even on an imperfect or early-quit session), a perfect
- * bonus, a beat-the-speed-target bonus, and any newly-reached streak
- * milestone. Each award is its own PointsLedger row for auditability.
+ * Awards points for a single correct answer, immediately (called from the
+ * attempts route) so the player sees points land right after each question
+ * rather than only in a lump sum at the end. Keyed by problemId, which is
+ * unique per attempt (retries get a fresh problem row), so this can't be
+ * double-awarded for the same question.
  */
-export async function awardSessionPoints(
+export async function awardCorrectAnswerPoints(
+  studentId: string,
+  problemId: string
+): Promise<number> {
+  await prisma.pointsLedger.create({
+    data: { studentId, delta: POINTS_PER_CORRECT, reason: `problem:${problemId}:correct` },
+  });
+  return POINTS_PER_CORRECT;
+}
+
+/**
+ * Awards the session-level bonuses once a session finishes: a perfect-score
+ * bonus, a beat-the-speed-target bonus, and any newly-reached streak
+ * milestone. Per-question points are already awarded as they happen via
+ * awardCorrectAnswerPoints, so this only ever adds bonuses on top. Each
+ * award is its own PointsLedger row for auditability.
+ */
+export async function awardSessionCompletionBonuses(
   studentId: string,
   sessionId: string,
-  score: number,
   medianSeconds: number,
   perfect: boolean,
   chapterId: string,
@@ -78,9 +95,6 @@ export async function awardSessionPoints(
 ): Promise<number> {
   const entries: { delta: number; reason: string }[] = [];
 
-  if (score > 0) {
-    entries.push({ delta: score * POINTS_PER_CORRECT, reason: `session:${sessionId}:correct` });
-  }
   if (perfect) {
     entries.push({ delta: PERFECT_BONUS, reason: `session:${sessionId}:perfect` });
   }

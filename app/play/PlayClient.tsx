@@ -134,9 +134,11 @@ function ProgressTrail({
 export function PlayClient({
   sessionId,
   problems,
+  initialPointsBalance,
 }: {
   sessionId: string;
   problems: PlayProblem[];
+  initialPointsBalance: number;
 }) {
   const [problemList, setProblemList] = useState(problems);
   const [index, setIndex] = useState(0);
@@ -157,7 +159,8 @@ export function PlayClient({
   const [showHomeConfirm, setShowHomeConfirm] = useState(false);
   const [leavingHome, setLeavingHome] = useState(false);
   const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
-  const [pointsBalance, setPointsBalance] = useState<number | null>(null);
+  const [pointsBalance, setPointsBalance] = useState<number>(initialPointsBalance);
+  const [lastPointsEarned, setLastPointsEarned] = useState<number | null>(null);
 
   const problem = problemList[index];
 
@@ -177,6 +180,7 @@ export function PlayClient({
     setLiveHint(null);
     setSolutionSteps([]);
     setShake(false);
+    setLastPointsEarned(null);
     const t = setTimeout(() => setBarFilled(true), 50);
     return () => clearTimeout(t);
   }, [index]);
@@ -256,6 +260,10 @@ export function PlayClient({
       setPhase("correct");
       setFeedbackMessage(pickRandom(CORRECT_MESSAGES));
       setConfettiTrigger((t) => t + 1);
+      if (typeof data.pointsEarned === "number") {
+        setLastPointsEarned(data.pointsEarned);
+        setPointsBalance(data.pointsBalance);
+      }
     } else {
       playWrongSound();
       setShake(true);
@@ -400,11 +408,16 @@ export function PlayClient({
         <h1 className="font-fun text-2xl font-semibold text-purple-700 dark:text-purple-200">
           🍕 Fraction Quest
         </h1>
-        {streak >= 2 && (
-          <span className="font-fun flex items-center gap-1 text-lg font-semibold text-orange-500 animate-wiggle-in">
-            🔥 {streak}
+        <div className="flex items-center gap-3">
+          <span className="font-fun flex items-center gap-1 text-lg font-semibold text-amber-500">
+            ✨ {pointsBalance}
           </span>
-        )}
+          {streak >= 2 && (
+            <span className="font-fun flex items-center gap-1 text-lg font-semibold text-orange-500 animate-wiggle-in">
+              🔥 {streak}
+            </span>
+          )}
+        </div>
       </div>
 
       <ProgressTrail total={problemList.length} currentIndex={index} records={records} />
@@ -474,6 +487,9 @@ export function PlayClient({
       {phase === "correct" && feedbackMessage && (
         <p className="font-fun text-lg font-semibold animate-pop-in text-emerald-600 dark:text-emerald-400">
           {feedbackMessage}
+          {lastPointsEarned !== null && (
+            <span className="text-amber-500 ml-2">+{lastPointsEarned} ✨</span>
+          )}
         </p>
       )}
 

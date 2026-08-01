@@ -1,4 +1,6 @@
 import { getOrCreateTodaySession } from "@/lib/session";
+import { getPointsBalance } from "@/lib/points";
+import { prisma } from "@/lib/prisma";
 import { PlayClient, PlayProblem } from "./PlayClient";
 
 export default async function PlayPage() {
@@ -14,5 +16,14 @@ export default async function PlayPage() {
     estimatedSeconds: p.estimatedSeconds,
   }));
 
-  return <PlayClient sessionId={session.id} problems={clientProblems} />;
+  const student = await prisma.student.findUniqueOrThrow({ where: { id: session.studentId } });
+  const initialPointsBalance = await getPointsBalance(student.id);
+
+  return (
+    <PlayClient
+      sessionId={session.id}
+      problems={clientProblems}
+      initialPointsBalance={initialPointsBalance}
+    />
+  );
 }

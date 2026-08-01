@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { awardSessionPoints, getPointsBalance } from "@/lib/points";
+import { awardSessionCompletionBonuses, getPointsBalance } from "@/lib/points";
 
 export async function PATCH(
   req: NextRequest,
@@ -27,10 +27,9 @@ export async function PATCH(
 
   let pointsAwarded = 0;
   if (firstProblem) {
-    pointsAwarded = await awardSessionPoints(
+    pointsAwarded = await awardSessionCompletionBonuses(
       session.studentId,
       session.id,
-      score,
       medianSeconds,
       perfect,
       firstProblem.chapterId,

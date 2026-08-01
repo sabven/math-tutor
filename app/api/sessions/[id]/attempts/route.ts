@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ChapterConfig } from "@/lib/generation";
 import { applyLevelChange, checkLevelChange, updateSkillScore } from "@/lib/elo";
 import { generateHintAndRetry, StoredOption } from "@/lib/hintRetry";
+import { awardCorrectAnswerPoints, getPointsBalance } from "@/lib/points";
 
 export async function POST(
   req: NextRequest,
@@ -72,12 +73,16 @@ export async function POST(
   );
 
   if (correct) {
+    const pointsEarned = await awardCorrectAnswerPoints(session.studentId, problemId);
+    const pointsBalance = await getPointsBalance(session.studentId);
     return NextResponse.json({
       correct,
       correctIdx,
       solutionSteps: problem.solutionSteps,
       levelChange,
       newLevel,
+      pointsEarned,
+      pointsBalance,
     });
   }
 

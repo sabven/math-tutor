@@ -13,43 +13,121 @@
       "id": "frac.equiv",
       "name": "Equivalence & Simplification",
       "description": "Recognizing equivalent fractions, reducing to lowest terms, converting between improper fractions and mixed numbers.",
-      "prerequisite_of": ["frac.add", "frac.sub", "frac.compare"]
+      "prerequisite_of": ["frac.add", "frac.sub", "frac.compare"],
+      "lesson": {
+        "summary": "Two fractions are equivalent when they represent the same amount, even though the numbers look different.",
+        "example_text": "1/2 of a pizza is the same amount as 2/4 of the same pizza — just cut into more, smaller slices.",
+        "diagram": {
+          "type": "bar",
+          "bars": [
+            { "numerator": 1, "denominator": 2, "label": "1/2" },
+            { "numerator": 2, "denominator": 4, "label": "2/4" }
+          ]
+        }
+      }
     },
     {
       "id": "frac.compare",
       "name": "Comparing & Ordering",
-      "description": "Comparing fractions with unlike denominators, ordering sets of fractions, placing fractions between two given fractions."
+      "description": "Comparing fractions with unlike denominators, ordering sets of fractions, placing fractions between two given fractions.",
+      "lesson": {
+        "summary": "To compare fractions with different denominators, it helps to picture how much of the whole each one covers.",
+        "example_text": "2/3 covers more of the bar than 3/5 does, even though 5 is a bigger number than 3.",
+        "diagram": {
+          "type": "bar",
+          "bars": [
+            { "numerator": 2, "denominator": 3, "label": "2/3" },
+            { "numerator": 3, "denominator": 5, "label": "3/5" }
+          ]
+        }
+      }
     },
     {
       "id": "frac.add",
       "name": "Addition",
-      "description": "Adding fractions: like denominators, unlike denominators, mixed numbers, more than two terms."
+      "description": "Adding fractions: like denominators, unlike denominators, mixed numbers, more than two terms.",
+      "lesson": {
+        "summary": "Adding fractions with the same denominator just means adding up the shaded pieces — the denominator stays the same.",
+        "example_text": "1/4 of a bar plus 2/4 more of the same bar covers 3/4 in total.",
+        "diagram": {
+          "type": "bar",
+          "bars": [
+            { "numerator": 1, "denominator": 4, "label": "1/4" },
+            { "numerator": 2, "denominator": 4, "label": "+ 2/4" },
+            { "numerator": 3, "denominator": 4, "label": "= 3/4" }
+          ]
+        }
+      }
     },
     {
       "id": "frac.sub",
       "name": "Subtraction",
-      "description": "Subtracting fractions: like denominators, unlike denominators, mixed numbers with regrouping (borrowing)."
+      "description": "Subtracting fractions: like denominators, unlike denominators, mixed numbers with regrouping (borrowing).",
+      "lesson": {
+        "summary": "Subtracting fractions with the same denominator means taking away shaded pieces from what you started with.",
+        "example_text": "Start with 3/4 shaded, take away 1/4, and 2/4 is left.",
+        "diagram": {
+          "type": "bar",
+          "bars": [
+            { "numerator": 3, "denominator": 4, "label": "3/4" },
+            { "numerator": 1, "denominator": 4, "label": "- 1/4" },
+            { "numerator": 2, "denominator": 4, "label": "= 2/4" }
+          ]
+        }
+      }
     },
     {
       "id": "frac.mul",
       "name": "Multiplication",
-      "description": "Fraction x whole number, fraction x fraction, mixed numbers, cancelling before multiplying, 'of' as multiplication."
+      "description": "Fraction x whole number, fraction x fraction, mixed numbers, cancelling before multiplying, 'of' as multiplication.",
+      "lesson": {
+        "summary": "Multiplying two fractions is like finding the overlap when you shade rows for one fraction and columns for the other.",
+        "example_text": "2/3 of the rows and 3/4 of the columns overlap in 6 of the 12 total squares — so 2/3 x 3/4 = 6/12 = 1/2.",
+        "diagram": {
+          "type": "grid",
+          "rows": 3,
+          "cols": 4,
+          "rowsShaded": 2,
+          "colsShaded": 3,
+          "aLabel": "2/3",
+          "bLabel": "3/4"
+        }
+      }
     },
     {
       "id": "frac.div",
       "name": "Division",
-      "description": "Dividing by a fraction (reciprocal method), whole / fraction, fraction / fraction, mixed numbers, interpreting division word contexts."
+      "description": "Dividing by a fraction (reciprocal method), whole / fraction, fraction / fraction, mixed numbers, interpreting division word contexts.",
+      "lesson": {
+        "summary": "Dividing by a fraction asks: how many of that fraction's pieces fit inside the amount you have?",
+        "example_text": "3/4 divided by 1/4 asks how many 1/4-size pieces fit inside 3/4 — the answer is 3.",
+        "diagram": {
+          "type": "bar",
+          "bars": [
+            { "numerator": 3, "denominator": 4, "label": "3/4 (what you have)" },
+            { "numerator": 1, "denominator": 4, "label": "1/4 (the piece size)" }
+          ]
+        }
+      }
     },
     {
       "id": "frac.word",
       "name": "Word Problems",
-      "description": "Multi-step real-world problems combining operations. Includes part-of-a-part, remaining-quantity, and rate-style problems."
+      "description": "Multi-step real-world problems combining operations. Includes part-of-a-part, remaining-quantity, and rate-style problems.",
+      "lesson": {
+        "summary": "Word problems combine the fraction skills you already know — the trick is figuring out whether a fraction applies to the whole amount or just to what's left over.",
+        "example_text": "\"Sara ate 1/2 of a cake, then ate 1/3 of what was left.\" The 1/3 applies to the remaining half, not the whole cake — so she ate 1/2 + (1/3 of 1/2) = 1/2 + 1/6 = 2/3 of the cake in total."
+      }
     },
     {
       "id": "frac.var",
       "name": "Equations with Variables",
       "description": "Solving equations where fractions and variables mix, e.g. x + 1/3 = 3x, x/4 + 2 = 5, (2x+1)/3 = x - 1. Fraction coefficients and fraction answers.",
-      "prerequisite_of": []
+      "prerequisite_of": [],
+      "lesson": {
+        "summary": "An equation stays true as long as you do the exact same thing to both sides — like keeping a balance scale level.",
+        "example_text": "x + 1/3 = 3x: subtract x from both sides to get 1/3 = 2x, then divide both sides by 2 to get x = 1/6."
+      }
     }
   ],
 

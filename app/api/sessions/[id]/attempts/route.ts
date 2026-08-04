@@ -124,6 +124,7 @@ export async function POST(
     retryProblem: retryProblem
       ? {
           id: retryProblem.id,
+          subtopicId: retryProblem.subtopicId,
           statement: retryProblem.statement,
           statementLatex: retryProblem.statementLatex,
           options: retryProblem.options,

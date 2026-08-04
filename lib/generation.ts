@@ -10,10 +10,31 @@ import {
 import { prisma } from "./prisma";
 import type { Prisma } from "@prisma/client";
 
+export type LessonDiagram =
+  | {
+      type: "bar";
+      bars: { numerator: number; denominator: number; label?: string }[];
+    }
+  | {
+      type: "grid";
+      rows: number;
+      cols: number;
+      rowsShaded: number;
+      colsShaded: number;
+      aLabel?: string;
+      bLabel?: string;
+    };
+
+export interface SubtopicLesson {
+  summary: string;
+  example_text?: string;
+  diagram?: LessonDiagram;
+}
+
 export interface ChapterConfig {
   chapter_id: string;
   version: number;
-  subtopics: { id: string; name: string }[];
+  subtopics: { id: string; name: string; lesson?: SubtopicLesson }[];
   difficulty_ladder: {
     level: number;
     label?: string;

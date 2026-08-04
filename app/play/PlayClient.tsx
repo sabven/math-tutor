@@ -14,6 +14,7 @@ export interface PlayOption {
 
 export interface PlayProblem {
   id: string;
+  subtopicId: string;
   statement: string;
   statementLatex: string;
   options: PlayOption[];

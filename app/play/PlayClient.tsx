@@ -27,7 +27,7 @@ interface AttemptRecord {
   seconds: number;
 }
 
-type Phase = "unanswered" | "correct" | "hint" | "solution" | "stale";
+type Phase = "unanswered" | "retry" | "correct" | "hint" | "solution" | "stale";
 
 const CORRECT_MESSAGES = [
   "Fraction ninja! 🥷",
@@ -161,6 +161,8 @@ export function PlayClient({
   const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
   const [pointsBalance, setPointsBalance] = useState<number>(initialPointsBalance);
   const [lastPointsEarned, setLastPointsEarned] = useState<number | null>(null);
+  const [wrongAttemptIdx, setWrongAttemptIdx] = useState<number | null>(null);
+  const [retryUsed, setRetryUsed] = useState(false);
 
   const problem = problemList[index];
 
@@ -181,6 +183,8 @@ export function PlayClient({
     setSolutionSteps([]);
     setShake(false);
     setLastPointsEarned(null);
+    setWrongAttemptIdx(null);
+    setRetryUsed(false);
     const t = setTimeout(() => setBarFilled(true), 50);
     return () => clearTimeout(t);
   }, [index]);
@@ -230,14 +234,32 @@ export function PlayClient({
   }
 
   async function choose(optionIdx: number) {
-    if (chosenIdx !== null) return;
+    if (chosenIdx !== null || optionIdx === wrongAttemptIdx) return;
+
+    // First wrong pick gets one free retry instead of finalizing as wrong:
+    // let them pick again, just gray out the option they already tried.
+    if (!retryUsed && !problem.options[optionIdx]?.is_correct) {
+      setWrongAttemptIdx(optionIdx);
+      setRetryUsed(true);
+      setPhase("retry");
+      playWrongSound();
+      setShake(true);
+      setTimeout(() => setShake(false), 400);
+      return;
+    }
+
     const seconds = Math.round((Date.now() - startedAt) / 1000);
     setChosenIdx(optionIdx);
 
     const res = await fetch(`/api/sessions/${sessionId}/attempts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ problemId: problem.id, chosenOptionIdx: optionIdx, seconds }),
+      body: JSON.stringify({
+        problemId: problem.id,
+        chosenOptionIdx: optionIdx,
+        seconds,
+        usedRetry: retryUsed,
+      }),
     });
 
     if (res.status === 410) {
@@ -452,12 +474,15 @@ export function PlayClient({
             } else {
               colorClasses = `${theme.solid} text-white opacity-30`;
             }
+          } else if (i === wrongAttemptIdx) {
+            colorClasses = "bg-neutral-400 dark:bg-neutral-600 text-white opacity-70";
+            extra = shake ? "animate-shake" : "";
           }
           return (
             <button
               key={i}
               onClick={() => choose(i)}
-              disabled={chosenIdx !== null}
+              disabled={chosenIdx !== null || i === wrongAttemptIdx}
               className={`flex items-center justify-center gap-2 text-xl font-bold rounded-2xl py-8 px-4 shadow-md transition-all ${colorClasses} ${extra}`}
             >
               <ShapeIcon shape={theme.shape} />
@@ -482,6 +507,12 @@ export function PlayClient({
             Refresh
           </button>
         </div>
+      )}
+
+      {phase === "retry" && (
+        <p className="font-fun text-lg font-semibold animate-pop-in text-rose-500">
+          Not quite — give it one more try! 🔄
+        </p>
       )}
 
       {phase === "correct" && feedbackMessage && (

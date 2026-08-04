@@ -11,10 +11,11 @@ export async function POST(
 ) {
   const { id: sessionId } = await params;
   const body = await req.json();
-  const { problemId, chosenOptionIdx, seconds } = body as {
+  const { problemId, chosenOptionIdx, seconds, usedRetry } = body as {
     problemId: string;
     chosenOptionIdx: number;
     seconds: number;
+    usedRetry?: boolean;
   };
 
   const [problem, session] = await Promise.all([
@@ -73,7 +74,7 @@ export async function POST(
   );
 
   if (correct) {
-    const pointsEarned = await awardCorrectAnswerPoints(session.studentId, problemId);
+    const pointsEarned = await awardCorrectAnswerPoints(session.studentId, problemId, Boolean(usedRetry));
     const pointsBalance = await getPointsBalance(session.studentId);
     return NextResponse.json({
       correct,

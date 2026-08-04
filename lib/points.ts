@@ -66,16 +66,23 @@ export async function getPointsBalance(studentId: string): Promise<number> {
  * attempts route) so the player sees points land right after each question
  * rather than only in a lump sum at the end. Keyed by problemId, which is
  * unique per attempt (retries get a fresh problem row), so this can't be
- * double-awarded for the same question.
+ * double-awarded for the same question. Answers that needed the one free
+ * retry (a wrong pick before the final correct one) earn half points.
  */
 export async function awardCorrectAnswerPoints(
   studentId: string,
-  problemId: string
+  problemId: string,
+  usedRetry = false
 ): Promise<number> {
+  const points = usedRetry ? Math.max(1, Math.floor(POINTS_PER_CORRECT / 2)) : POINTS_PER_CORRECT;
   await prisma.pointsLedger.create({
-    data: { studentId, delta: POINTS_PER_CORRECT, reason: `problem:${problemId}:correct` },
+    data: {
+      studentId,
+      delta: points,
+      reason: `problem:${problemId}:correct${usedRetry ? ":retry" : ""}`,
+    },
   });
-  return POINTS_PER_CORRECT;
+  return points;
 }
 
 /**

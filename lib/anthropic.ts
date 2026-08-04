@@ -6,3 +6,7 @@ export const anthropic = new Anthropic();
 // temperature 0.7 for numeric/context variety and 0.3 for hints/reports, and
 // non-default sampling parameters are rejected on Sonnet 5 / Opus 5.
 export const GENERATION_MODEL = "claude-sonnet-4-6";
+
+// The content-gate safety/appropriateness pass (docs/content-gate.md) - cheap
+// and fast enough to run on every AI-authored problem, hint, and retry.
+export const MODERATION_MODEL = "claude-haiku-4-5";

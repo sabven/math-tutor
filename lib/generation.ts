@@ -1,13 +1,8 @@
 import { anthropic, GENERATION_MODEL } from "./anthropic";
 import { fillTemplate, loadPromptTemplate } from "./prompts";
-import {
-  Answer,
-  answerToNumber,
-  isSimplified,
-  verifyExpressionMatchesAnswer,
-  verifySubstitutionMatches,
-} from "./mathVerify";
+import type { Answer } from "./mathVerify";
 import { prisma } from "./prisma";
+import { gateContent, recordGenerationAudit } from "./contentGate";
 import type { Prisma } from "@prisma/client";
 
 export type LessonDiagram =
@@ -34,7 +29,7 @@ export interface SubtopicLesson {
 export interface ChapterConfig {
   chapter_id: string;
   version: number;
-  subtopics: { id: string; name: string; lesson?: SubtopicLesson }[];
+  subtopics: { id: string; name: string; lesson?: SubtopicLesson; fallback_hint?: string }[];
   difficulty_ladder: {
     level: number;
     label?: string;
@@ -264,44 +259,6 @@ function parseModelJsonArray(text: string): RawProblem[] {
   return JSON.parse(trimmed.slice(start, end + 1));
 }
 
-export function verifyProblem(problem: RawProblem, config: ChapterConfig): string | null {
-  if (!problem.options || problem.options.length !== config.generation_rules.options_per_problem) {
-    return "wrong option count";
-  }
-  const correctOptions = problem.options.filter((o) => o.is_correct);
-  if (correctOptions.length !== 1) return "must have exactly 1 correct option";
-
-  const values = problem.options.map((o) => o.display);
-  if (new Set(values).size !== values.length) return "duplicate option values";
-
-  const validMisconceptionIds = new Set(config.misconceptions.map((m) => m.id));
-  for (const opt of problem.options) {
-    if (!opt.is_correct) {
-      if (!opt.misconception_id || !validMisconceptionIds.has(opt.misconception_id)) {
-        return `invalid misconception_id: ${opt.misconception_id}`;
-      }
-    }
-  }
-
-  if (!isSimplified(problem.answer)) return "answer not simplified";
-
-  if (problem.verify_substitution) {
-    if (!verifySubstitutionMatches(problem.verify_substitution)) {
-      return "substitution check failed";
-    }
-  } else if (problem.verify_expression) {
-    if (!verifyExpressionMatchesAnswer(problem.verify_expression, problem.answer)) {
-      return "expression verification failed";
-    }
-  } else {
-    if (answerToNumber(problem.answer) === null) {
-      return "no verify_expression/verify_substitution and answer not directly checkable";
-    }
-  }
-
-  return null;
-}
-
 export function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -315,6 +272,7 @@ export interface GenerationResult {
   saved: number;
   requested: number;
   failures: { temp_id: string; reason: string }[];
+  gateStats: { pass: number; fail: number };
 }
 
 export async function generateAndSaveBatch(
@@ -354,13 +312,34 @@ export async function generateAndSaveBatch(
 
   const failures: { temp_id: string; reason: string }[] = [];
   const verified: RawProblem[] = [];
+  const gateStats = { pass: 0, fail: 0 };
 
+  // Behavior unchanged from before the content gate (docs/content-gate.md):
+  // over-request `requestSize` and discard whatever fails, no per-slot
+  // regenerate-with-reasons loop here - that loop exists for the live
+  // hint/retry surfaces (lib/hintRetry.ts), not the nightly batch. What's
+  // new is the pass/fail *criteria* themselves (gateContent adds the
+  // moderation pass and the extra correctness checks on top of the old
+  // verifyProblem checks) and that every attempt is now audited.
   for (const problem of rawProblems) {
-    const failureReason = verifyProblem(problem, config);
-    if (failureReason) {
-      failures.push({ temp_id: problem.temp_id, reason: failureReason });
+    const verdict = await gateContent({ kind: "problem", problem }, config);
+    await recordGenerationAudit({
+      kind: "problem",
+      pass: verdict.pass,
+      reasons: verdict.reasons,
+      attempt: 1,
+      model: GENERATION_MODEL,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      content: JSON.stringify(problem),
+    });
+
+    if (!verdict.pass) {
+      gateStats.fail++;
+      failures.push({ temp_id: problem.temp_id, reason: verdict.reasons.join("; ") });
       continue;
     }
+    gateStats.pass++;
     verified.push(problem);
     if (verified.length >= batchSize) break;
   }
@@ -369,7 +348,7 @@ export async function generateAndSaveBatch(
     await saveVerifiedProblem(chapterId, problem);
   }
 
-  return { saved: verified.length, requested: batchSize, failures };
+  return { saved: verified.length, requested: batchSize, failures, gateStats };
 }
 
 export async function saveVerifiedProblem(chapterId: string, problem: RawProblem) {

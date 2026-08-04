@@ -1,6 +1,7 @@
 # Math Tutor — Build Plan
 Tech stack, AWS setup, and phase-by-phase delivery plan.
-Companion files: `data/chapters/fractions.json`, `problem-generation-prompt.md`
+Companion files: `data/chapters/fractions.json`, `problem-generation-prompt.md`,
+`docs/content-gate.md` (Phase 8 spec — safety + correctness gate for all AI-authored content)
 
 ---
 
@@ -301,6 +302,26 @@ Acceptance: a student can preview every concept in today's session with a correc
 diagram before answering, or skip straight to questions with no visible change from prior
 behavior.
 
+### Phase 8 — Content gate: safety + correctness for all AI-authored content (next up)
+Full spec: **`docs/content-gate.md`** — build from that file, not this summary.
+- One shared `gateContent(kind, payload)` (`lib/contentGate.ts`): existing math.js +
+  structural checks relocated there and extended (KaTeX render check, single-correct-
+  option, distinct options), plus a new Haiku moderation pass (`lib/moderation.ts`)
+  for age-appropriateness, ambiguity, and hint quality (no answer leaks, never
+  confirms a wrong answer).
+- Closes the two current holes: live hints and retry problems are served ungated today.
+- Reject → regenerate with reasons (max 2 retries) → fallback (bank problem / static
+  `fallbackHint` from chapter config). Child never waits on a loop, never sees ungated
+  content.
+- `GenerationAudit` table: every gate call logged with verdict, reasons, and token
+  counts — doubles as cost observability for the budget guard.
+- Vitest coverage for every deterministic assert (first tests on the learning-engine
+  side of the codebase — see Section 6's "Not covered" list).
+- Exit criterion: `scripts/audit-generation.ts` 500-problem run + human sample review,
+  clean, **before any non-family user gets a login** (prerequisite for real Phase 6).
+Acceptance: every AI-authored string reaching a child, parent, or email has a passing
+audit row; API outage degrades to bank problems + static hints, not errors.
+
 ---
 
 ## 6. Testing
@@ -340,7 +361,33 @@ stakes (they only gate/sign a throwaway CI server hitting a throwaway database).
 
 ---
 
-## 7. Order of Operations, Day One with Claude Code
+## 7. Documentation Conventions
+
+How this project stays documented as it grows (and as more docs like
+`content-gate.md` get added):
+
+- **`docs/` folder in the repo** holds all planning/spec markdown: `build-plan.md`
+  (this file — the index and source of truth for status), `content-gate.md`,
+  `problem-generation-prompt.md`, and one spec file per future feature. Specs live
+  in the repo, not in chat history, so Claude Code always has them in context.
+- **This file is the index.** Every companion doc is listed in the header block at
+  the top, and every phase that has its own spec links to it. A doc not referenced
+  from here is considered orphaned.
+- **Update docs in the same commit as the code.** The pattern already used in
+  Phases 2–7 — recording what was *actually* built vs. originally spec'd (e.g.
+  GitHub Actions cron instead of EventBridge), plus "Not done" lists — is the
+  single most valuable habit here. Keep it: after each phase, amend the phase
+  entry with done/not-done/deviations before starting the next.
+- **Each spec ends with an Acceptance section** (testable, in plain language),
+  matching the phase-plan style. If acceptance can be a query or a test, say which.
+- **`README.md` stays thin**: what the app is, how to run locally, env vars table,
+  link to `docs/build-plan.md`. Everything else lives in docs/.
+- Ask Claude Code to update the relevant doc as part of every feature prompt
+  ("…and update docs/build-plan.md's Phase 8 entry with what was actually built").
+
+---
+
+## 8. Order of Operations, Day One with Claude Code
 
 1. Create GitHub repo, connect Amplify, set env vars (Section 4) — do this
    BEFORE writing code, so deploys work from the first commit.

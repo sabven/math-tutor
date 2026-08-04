@@ -178,3 +178,25 @@ model ParentReport {
   body   String
   sentAt DateTime?
 }
+
+// docs/content-gate.md - one row per gate call (pass or fail) for every
+// AI-authored problem, hint, or retry. problemId/sessionId are plain
+// strings, not FK relations: a rejected attempt never becomes a real
+// Problem row, so a hard foreign key would break on exactly the rows most
+// worth keeping (the failures).
+model GenerationAudit {
+  id           String   @id @default(cuid())
+  kind         String
+  createdAt    DateTime @default(now())
+  pass         Boolean
+  reasons      Json
+  attempt      Int
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  problemId    String?
+  sessionId    String?
+  contentHash  String
+
+  @@index([kind, createdAt])
+}

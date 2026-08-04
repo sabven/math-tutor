@@ -24,3 +24,4 @@ TIME TAKEN: {{seconds}} seconds
 
 CHAPTER CONFIG (constraints, misconceptions, speed targets):
 {{chapter_config_json}}
+{{previous_failure_reasons}}

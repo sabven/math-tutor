@@ -273,6 +273,34 @@ accumulated attempt history, Bedrock migration if desired. Also not done:
 per-family Perk catalogs — `Perk` is still a single global table, so every
 family currently sees and can add/deactivate the same shared perk list.
 
+### Phase 7 — Concept primer / mini-lessons ✅ Done
+Build:
+- Before a session's questions, `/play` shows "Today's Concepts": every distinct subtopic
+  covered by that session's problem batch, each with a one-line summary. The student chooses
+  "Learn these first" (a short carousel through each subtopic's summary + a mini-diagram +
+  worked example, then hands off into questions) or "Skip to questions" (goes straight in,
+  unchanged from before this feature existed).
+- Two reusable, parameterized SVG components (`app/play/ConceptDiagram.tsx`) rather than one
+  bespoke diagram per concept: `FractionBar` (shaded-segment bars) covers Equivalence,
+  Comparing, Addition, Subtraction, and Division; `FractionGrid` (row/column overlap area
+  model) covers Multiplication. Word Problems and Equations w/ Variables get summary + worked
+  example text only — they don't map onto a simple diagram.
+- Lesson content (`summary`, `example_text`, optional `diagram`) lives in each subtopic's entry
+  in `data/chapters/fractions.json`, hand-authored like the rest of the chapter config rather
+  than AI-generated at request time — this is core teaching material that should stay
+  consistent and pre-checked, not regenerated per session like hints are. Editing it requires
+  re-running `npm run seed` to push the updated config into the `Chapter` row (the JSON file
+  alone isn't read at runtime).
+- `app/play/PlaySessionClient.tsx` wraps the existing `PlayClient` unchanged — it only decides
+  whether `ConceptPrimer` or `PlayClient` renders first, so the question flow itself has zero
+  behavioral change when a student skips the primer.
+Not done: no lesson content or diagrams for a hypothetical second chapter (only `fractions.json`
+has `lesson` entries); no diagram type for Word Problems/Equations w/ Variables; the
+learn-vs-skip choice is asked fresh every session, nothing is remembered.
+Acceptance: a student can preview every concept in today's session with a correct, readable
+diagram before answering, or skip straight to questions with no visible change from prior
+behavior.
+
 ---
 
 ## 6. Testing
@@ -301,8 +329,9 @@ real browser driver (Playwright). What's tested instead is the pure logic those 
 (`verifyFamilyCredentials`, `createFamily`) plus the cookie-based session checks those actions set
 up — the thin `"use server"` wrappers themselves (parse form data, call the logic, redirect) are
 intentionally left as untested glue. Also not covered: everything from before this feature
-(problem generation, the adaptive Elo engine, the retry-before-wrong flow, hint generation) — none
-of it has tests yet.
+(problem generation, the adaptive Elo engine, the retry-before-wrong flow, hint generation), and
+everything added after it (Phase 7's concept primer and diagram components) — none of it has
+tests yet; both were verified by hand only, the same as Phases 1-5.
 
 CI: `.github/workflows/test.yml` runs the full suite on every push/PR to `main`. Requires one repo
 secret, `DATABASE_URL_TEST` (the same Neon test-branch connection string as local `.env`); the other

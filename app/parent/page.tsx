@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { isParentAuthenticated } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getFamilySession } from "@/lib/familyAuth";
 import { prisma } from "@/lib/prisma";
 import {
-  loginAction,
   logoutAction,
   updateSettingsAction,
   addPerkAction,
@@ -54,52 +54,25 @@ export default async function ParentPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    error?: string;
     session?: string;
     subtopic?: string;
     show?: string;
     settingsError?: string;
   }>;
 }) {
-  const authed = await isParentAuthenticated();
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    redirect("/login");
+  }
   const {
-    error,
     session: sessionParam,
     subtopic: subtopicParam,
     show,
     settingsError,
   } = await searchParams;
 
-  if (!authed) {
-    return (
-      <main className="flex-1 flex items-center justify-center p-8">
-        <Link
-          href="/"
-          className="fixed top-4 left-4 z-50 rounded-full border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 px-4 py-2 text-sm font-medium bg-white dark:bg-neutral-900 shadow hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-        >
-          ← Home
-        </Link>
-        <form action={loginAction} className="flex flex-col gap-3 w-full max-w-xs">
-          <h1 className="text-xl font-semibold text-center">Parent Login</h1>
-          <input
-            type="password"
-            name="pin"
-            placeholder="PIN"
-            inputMode="numeric"
-            autoFocus
-            className="border rounded px-3 py-2"
-            required
-          />
-          {error && <p className="text-red-600 text-sm">Incorrect PIN</p>}
-          <button type="submit" className="bg-blue-600 text-white rounded py-2 font-medium">
-            Unlock
-          </button>
-        </form>
-      </main>
-    );
-  }
-
   const sessions = await prisma.session.findMany({
+    where: { studentId: familySession.student.id },
     orderBy: { date: "desc" },
     include: {
       student: true,
@@ -119,7 +92,7 @@ export default async function ParentPage({
     for (const st of config.subtopics) allSubtopics.set(st.id, st.name);
   }
 
-  const student = await prisma.student.findFirst();
+  const student = familySession.student;
   const primaryConfig = configByChapter.get("fractions") ?? Array.from(configByChapter.values())[0];
 
   const [perks, pendingRedemptions, pointsBalance] = student

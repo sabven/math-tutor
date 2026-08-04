@@ -120,8 +120,8 @@ async function generateNewSession(chapterId: string, student: StudentForSession)
   return { session, problems };
 }
 
-export async function getOrCreateTodaySession(chapterId = "fractions") {
-  const student = await prisma.student.findFirstOrThrow();
+export async function getOrCreateTodaySession(studentId: string, chapterId = "fractions") {
+  const student = await prisma.student.findUniqueOrThrow({ where: { id: studentId } });
   const now = new Date();
 
   const existing = await prisma.session.findFirst({
@@ -149,7 +149,7 @@ export async function getOrCreateTodaySession(chapterId = "fractions") {
 
 // Always starts a fresh session, regardless of whether one already exists
 // for today — used by the "Play again" flow after a session is completed.
-export async function startNewSession(chapterId = "fractions") {
-  const student = await prisma.student.findFirstOrThrow();
+export async function startNewSession(studentId: string, chapterId = "fractions") {
+  const student = await prisma.student.findUniqueOrThrow({ where: { id: studentId } });
   return generateNewSession(chapterId, student);
 }

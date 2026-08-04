@@ -8,11 +8,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Family {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  students Student[]
+}
+
 model Student {
   id           String   @id @default(cuid())
   name         String
   currentLevel Int      @default(1)
   createdAt    DateTime @default(now())
+
+  // Nullable during the multi-family migration: existing rows start
+  // unclaimed, then get attached to a Family via the /admin screen. Tighten
+  // to required once no Student has a null familyId.
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id])
 
   // Parent-tunable overrides. Null means "use the chapter config's default".
   sessionLength       Int?

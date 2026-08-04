@@ -1,0 +1,32 @@
+name: Tests
+
+# Runs the unit + integration suite (tests/) on every push/PR to main. The
+# integration tests build and start a real Next server against a dedicated
+# Neon branch (DATABASE_URL_TEST secret) - never against production data.
+# The other env vars below have zero real-world stakes (they only sign
+# cookies / gate a throwaway CI server) so they're inlined rather than
+# stored as secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+      SESSION_SECRET: ci-session-secret-not-used-in-production
+      ADMIN_PASSWORD_HASH_B64: JDJiJDEwJHQ2bnZabGVoWWRCaFl4TmdCeFNDaGVRdnVCaHVOMEZJZHpJRmoyTG1sazM4NTU0bmtuMENX
+      JOB_SECRET: ci-job-secret-not-used-in-production
+      ANTHROPIC_API_KEY: sk-ant-ci-placeholder-never-called-in-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test

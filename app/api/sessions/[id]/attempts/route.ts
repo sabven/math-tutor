@@ -4,11 +4,17 @@ import { ChapterConfig } from "@/lib/generation";
 import { applyLevelChange, checkLevelChange, updateSkillScore } from "@/lib/elo";
 import { generateHintAndRetry, StoredOption } from "@/lib/hintRetry";
 import { awardCorrectAnswerPoints, getPointsBalance } from "@/lib/points";
+import { getFamilySession } from "@/lib/familyAuth";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const { id: sessionId } = await params;
   const body = await req.json();
   const { problemId, chosenOptionIdx, seconds, usedRetry } = body as {
@@ -22,6 +28,10 @@ export async function POST(
     prisma.problem.findUniqueOrThrow({ where: { id: problemId } }),
     prisma.session.findUniqueOrThrow({ where: { id: sessionId } }),
   ]);
+
+  if (session.studentId !== familySession.student.id) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   // A stale browser tab left open across a day boundary can still hold an
   // already-finished session in memory and try to keep posting answers to

@@ -1,6 +1,7 @@
+import { redirect } from "next/navigation";
 import { getOrCreateTodaySession } from "@/lib/session";
 import { getPointsBalance } from "@/lib/points";
-import { prisma } from "@/lib/prisma";
+import { getFamilySession } from "@/lib/familyAuth";
 import { PlayClient, PlayProblem } from "./PlayClient";
 
 // Reads/writes today's session via Prisma directly (no fetch/cookies/headers),
@@ -10,7 +11,12 @@ import { PlayClient, PlayProblem } from "./PlayClient";
 export const dynamic = "force-dynamic";
 
 export default async function PlayPage() {
-  const { session, problems } = await getOrCreateTodaySession();
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    redirect("/login");
+  }
+
+  const { session, problems } = await getOrCreateTodaySession(familySession.student.id);
 
   const clientProblems: PlayProblem[] = problems.map((p) => ({
     id: p.id,
@@ -22,8 +28,7 @@ export default async function PlayPage() {
     estimatedSeconds: p.estimatedSeconds,
   }));
 
-  const student = await prisma.student.findUniqueOrThrow({ where: { id: session.studentId } });
-  const initialPointsBalance = await getPointsBalance(student.id);
+  const initialPointsBalance = await getPointsBalance(familySession.student.id);
 
   return (
     <PlayClient

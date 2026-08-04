@@ -4,7 +4,7 @@ frontend:
     preBuild:
       commands:
         - npm ci --cache .npm --prefer-offline
-        - env | grep -E "^(DATABASE_URL|ANTHROPIC_API_KEY|PARENT_PIN_HASH_B64|JOB_SECRET|SES_FROM_EMAIL|PARENT_EMAIL)=" > .env.production || true
+        - env | grep -E "^(DATABASE_URL|ANTHROPIC_API_KEY|SESSION_SECRET|ADMIN_PASSWORD_HASH_B64|JOB_SECRET|SES_FROM_EMAIL|PARENT_EMAIL)=" > .env.production || true
         - echo "Captured env var keys:" && (cut -d= -f1 .env.production || echo "none captured")
     build:
       commands:

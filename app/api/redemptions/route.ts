@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPointsBalance } from "@/lib/points";
+import { getFamilySession } from "@/lib/familyAuth";
 
 export async function POST(req: NextRequest) {
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
   const { perkId } = body as { perkId: string };
 
-  const student = await prisma.student.findFirstOrThrow();
+  const student = familySession.student;
   const perk = await prisma.perk.findUniqueOrThrow({ where: { id: perkId } });
 
   if (!perk.active) {

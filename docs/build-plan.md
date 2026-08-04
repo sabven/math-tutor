@@ -99,8 +99,10 @@ Everything keyed by `studentId` from day one — multi-kid ready.
    - Environment variables (Amplify → App settings → Environment variables):
      - `DATABASE_URL` (Neon connection string)
      - `ANTHROPIC_API_KEY`
-     - `PARENT_PIN_HASH_B64` (base64 of the bcrypt hash of your PIN — base64
-       because Next.js's env loader mangles literal `$` characters in bcrypt hashes)
+     - `SESSION_SECRET` (random string, signs the family login session cookie)
+     - `ADMIN_PASSWORD_HASH_B64` (base64 of the bcrypt hash of the `/admin`
+       password — base64 because Next.js's env loader mangles literal `$`
+       characters in bcrypt hashes)
      - `JOB_SECRET` (shared secret for the `X-Job-Secret` header on `/api/jobs/*`)
      - `SES_FROM_EMAIL`, `PARENT_EMAIL` (unused until the Phase 3 email work ships)
    - Every git push now auto-deploys. Amplify gives you an https URL immediately;
@@ -250,13 +252,66 @@ Build:
 Acceptance: a second chapter runs end-to-end without code changes.
 
 ### Phase 6 (future, when other kids join)
-Cognito/Clerk auth, multi-student households, RDS migration, placement test
-for new students (adaptive 15-problem calibration), per-grade calibration
-data from accumulated attempt history, Bedrock migration if desired.
+Multi-family accounts ✅ Done (lightweight version): a `Family` model sits above
+`Student` (one student per family for now); `/login` is a per-family
+username/password that unlocks both `/play` and `/parent` for that family's
+own kid, HMAC-signed session cookie (`lib/familyAuth.ts`). Accounts are
+admin-provisioned, not self-service — `/admin` (separate password,
+`lib/adminAuth.ts`, `ADMIN_PASSWORD_HASH_B64`, unlinked from any public nav)
+lets you create a family + kid, or attach an existing unclaimed `Student` row
+to a new login. Every family-scoped query (`/parent`'s session list,
+`/play`'s today's-session lookup, redemptions, settings) is now filtered by
+the logged-in family's student instead of grabbing the first `Student` row in
+the table, and the session-mutating API routes verify the session actually
+belongs to the caller's family before accepting writes. `/api/jobs/generate`
+pre-generates a batch for every student, not just one, when the nightly cron
+calls it with no `studentId`.
+Not done / still real Phase 6 scope: Cognito/Clerk auth, true multi-student
+households (a family with 2+ kids), RDS migration, placement test for new
+students (adaptive 15-problem calibration), per-grade calibration data from
+accumulated attempt history, Bedrock migration if desired. Also not done:
+per-family Perk catalogs — `Perk` is still a single global table, so every
+family currently sees and can add/deactivate the same shared perk list.
 
 ---
 
-## 6. Order of Operations, Day One with Claude Code
+## 6. Testing
+
+Added alongside the multi-family accounts work (Phase 6) — before that, the project had **zero**
+automated tests, and everything (Phases 1-5) was verified by hand only. `tests/` (Vitest,
+`npm test`) now covers:
+
+- **Unit** (`tests/unit/`): the HMAC sign/verify round trip and tamper rejection for the family
+  session cookie (`lib/familyAuth.ts`), credential checking against a real DB row, admin password
+  hash decoding (`lib/adminAuth.ts`), and `createFamily` (`lib/admin.ts`) — new-student creation,
+  linking an existing unclaimed student, the race-guard against double-claiming, duplicate
+  usernames, missing fields.
+- **Integration** (`tests/integration/`): a real `next build` + `next start` runs against a
+  dedicated Neon branch (`DATABASE_URL_TEST`, never production), then real HTTP requests exercise
+  the actual security boundary this feature added — unauthenticated redirects on `/play`,
+  `/parent`, `/admin`; the admin and family login systems can't reach each other's gated pages even
+  while both cookies are present; and the ownership checks on the session/redemption API routes
+  (one family truly cannot read or write another family's data, verified as a 403 not just a
+  code-review claim).
+
+**Not covered**: the actual `<form action={...}>` submissions for `/login`, `/admin/login`, and the
+`/admin` create-family form. Next.js Server Actions can't be driven with a plain `fetch` (they need
+the client-runtime's request encoding), so exercising the literal form-submit path would need a
+real browser driver (Playwright). What's tested instead is the pure logic those actions call into
+(`verifyFamilyCredentials`, `createFamily`) plus the cookie-based session checks those actions set
+up — the thin `"use server"` wrappers themselves (parse form data, call the logic, redirect) are
+intentionally left as untested glue. Also not covered: everything from before this feature
+(problem generation, the adaptive Elo engine, the retry-before-wrong flow, hint generation) — none
+of it has tests yet.
+
+CI: `.github/workflows/test.yml` runs the full suite on every push/PR to `main`. Requires one repo
+secret, `DATABASE_URL_TEST` (the same Neon test-branch connection string as local `.env`); the other
+env vars the spawned test server needs are inlined in the workflow since they have no real-world
+stakes (they only gate/sign a throwaway CI server hitting a throwaway database).
+
+---
+
+## 7. Order of Operations, Day One with Claude Code
 
 1. Create GitHub repo, connect Amplify, set env vars (Section 4) — do this
    BEFORE writing code, so deploys work from the first commit.

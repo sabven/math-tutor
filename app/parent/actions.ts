@@ -1,40 +1,21 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
-import {
-  clearParentAuthCookie,
-  getParentPinHash,
-  isParentAuthenticated,
-  setParentAuthCookie,
-} from "@/lib/auth";
+import { clearFamilySessionCookie, getFamilySession } from "@/lib/familyAuth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
-export async function loginAction(formData: FormData) {
-  const pin = String(formData.get("pin") ?? "");
-  const hash = getParentPinHash();
-  const matches = hash.length > 0 && (await bcrypt.compare(pin, hash));
-
-  if (!matches) {
-    redirect("/parent?error=1");
-  }
-
-  await setParentAuthCookie();
-  redirect("/parent");
-}
-
 export async function logoutAction() {
-  await clearParentAuthCookie();
-  redirect("/parent");
+  await clearFamilySessionCookie();
+  redirect("/login");
 }
 
 export async function updateSettingsAction(formData: FormData) {
-  if (!(await isParentAuthenticated())) {
-    redirect("/parent");
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    redirect("/login");
   }
-
-  const student = await prisma.student.findFirstOrThrow();
+  const student = familySession.student;
 
   const rawSessionLength = String(formData.get("sessionLength") ?? "").trim();
   const sessionLength = rawSessionLength ? Math.max(1, parseInt(rawSessionLength, 10)) : null;
@@ -70,8 +51,8 @@ export async function updateSettingsAction(formData: FormData) {
 }
 
 export async function addPerkAction(formData: FormData) {
-  if (!(await isParentAuthenticated())) {
-    redirect("/parent");
+  if (!(await getFamilySession())) {
+    redirect("/login");
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -90,8 +71,8 @@ export async function addPerkAction(formData: FormData) {
 }
 
 export async function togglePerkAction(formData: FormData) {
-  if (!(await isParentAuthenticated())) {
-    redirect("/parent");
+  if (!(await getFamilySession())) {
+    redirect("/login");
   }
 
   const perkId = String(formData.get("perkId") ?? "");
@@ -102,11 +83,17 @@ export async function togglePerkAction(formData: FormData) {
 }
 
 export async function grantRedemptionAction(formData: FormData) {
-  if (!(await isParentAuthenticated())) {
-    redirect("/parent");
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    redirect("/login");
   }
 
   const redemptionId = String(formData.get("redemptionId") ?? "");
+  const redemption = await prisma.redemption.findUniqueOrThrow({ where: { id: redemptionId } });
+  if (redemption.studentId !== familySession.student.id) {
+    redirect("/parent");
+  }
+
   await prisma.redemption.update({
     where: { id: redemptionId },
     data: { status: "granted" },

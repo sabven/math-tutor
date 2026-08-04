@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getPointsBalance } from "@/lib/points";
+import { getFamilySession } from "@/lib/familyAuth";
 import { ShopClient } from "./ShopClient";
 
 // See app/play/page.tsx for why this is needed: no fetch/cookies/headers
@@ -8,14 +10,11 @@ import { ShopClient } from "./ShopClient";
 export const dynamic = "force-dynamic";
 
 export default async function ShopPage() {
-  const student = await prisma.student.findFirst();
-  if (!student) {
-    return (
-      <main className="flex-1 flex items-center justify-center p-8">
-        <p className="text-neutral-500">No student set up yet.</p>
-      </main>
-    );
+  const familySession = await getFamilySession();
+  if (!familySession) {
+    redirect("/login");
   }
+  const student = familySession.student;
 
   const [perks, redemptions, balance] = await Promise.all([
     prisma.perk.findMany({ where: { active: true }, orderBy: { pointCost: "asc" } }),

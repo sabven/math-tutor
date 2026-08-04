@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { getPointsBalance } from "@/lib/points";
 import { ShopClient } from "./ShopClient";
 
+// See app/play/page.tsx for why this is needed: no fetch/cookies/headers
+// usage here means Next would otherwise statically cache this page and
+// serve one build-time snapshot of balance/redemptions to every visitor.
+export const dynamic = "force-dynamic";
+
 export default async function ShopPage() {
   const student = await prisma.student.findFirst();
   if (!student) {

@@ -326,28 +326,39 @@ export async function generateAndSaveBatch(
     const rawProblems = parseModelJsonArray(textBlock.text);
     const attemptFailureReasons: string[] = [];
 
-    for (const problem of rawProblems) {
-      const verdict = await gateContent({ kind: "problem", problem }, config);
-      await recordGenerationAudit({
-        kind: "problem",
-        pass: verdict.pass,
-        reasons: verdict.reasons,
-        attempt,
-        model: GENERATION_MODEL,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-        content: JSON.stringify(problem),
-      });
+    // Each gateContent call is its own Anthropic round-trip (moderateContent);
+    // running requestSize of them one at a time serialized this whole batch
+    // behind N sequential network calls, which is what made /play's
+    // synchronous getOrCreateTodaySession -> generateNewSession path slow
+    // enough to feel unresponsive (and worse across multiple retry attempts).
+    // Gate them concurrently, then apply the batchSize cap in original order.
+    const gated = await Promise.all(
+      rawProblems.map(async (problem) => {
+        const verdict = await gateContent({ kind: "problem", problem }, config);
+        await recordGenerationAudit({
+          kind: "problem",
+          pass: verdict.pass,
+          reasons: verdict.reasons,
+          attempt,
+          model: GENERATION_MODEL,
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+          content: JSON.stringify(problem),
+        });
+        return { problem, verdict };
+      })
+    );
 
+    for (const { problem, verdict } of gated) {
       if (!verdict.pass) {
         gateStats.fail++;
         failures.push({ temp_id: problem.temp_id, reason: verdict.reasons.join("; ") });
         attemptFailureReasons.push(verdict.reasons.join("; "));
         continue;
       }
+      if (verified.length >= batchSize) continue;
       gateStats.pass++;
       verified.push(problem);
-      if (verified.length >= batchSize) break;
     }
 
     if (verified.length < batchSize && attemptFailureReasons.length > 0) {

@@ -52,7 +52,12 @@ async function fillBatchFromBank(
       .config as unknown as ChapterConfig;
     const studentState = await buildStudentState(studentId, config, currentLevel);
     const shortfallTotal = shortfall.reduce((sum, e) => sum + e.count, 0);
-    await generateAndSaveBatch(chapterId, shortfallTotal, shortfall, studentState);
+    // maxAttempts: 1 - this runs synchronously on /play's request path, which
+    // sits behind a platform request timeout. The multi-attempt reject/
+    // regenerate loop (docs/content-gate.md §5) still applies to the nightly
+    // job (app/api/jobs/generate), which keeps the bank stocked so this
+    // on-demand fallback is rarely needed and rarely short by much when it is.
+    await generateAndSaveBatch(chapterId, shortfallTotal, shortfall, studentState, 1);
 
     for (const entry of shortfall) {
       const fresh = await prisma.problem.findMany({

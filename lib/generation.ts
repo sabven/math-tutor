@@ -279,25 +279,27 @@ export async function generateAndSaveBatch(
   chapterId: string,
   batchSize: number,
   batchSpec: BatchSpecEntry[],
-  studentState: StudentState
+  studentState: StudentState,
+  // Each attempt is a full generation round-trip (a large, multi-problem
+  // completion) plus a gate pass, not a cheap retry - defaults to
+  // docs/content-gate.md §5's 3-attempt reject/regenerate loop for the
+  // nightly job (app/api/jobs/generate), which has no request-time budget.
+  // lib/session.ts's on-demand bank-fill runs synchronously on /play's
+  // critical path behind a platform request timeout, so it caps this at 1:
+  // 3 sequential multi-thousand-token generations there was enough to make
+  // /play itself time out.
+  maxAttempts = 3
 ): Promise<GenerationResult> {
   const chapter = await prisma.chapter.findUniqueOrThrow({ where: { id: chapterId } });
   const config = chapter.config as unknown as ChapterConfig;
 
   const template = loadPromptTemplate("generate-batch.md");
-  const maxAttempts = 3;
 
   const failures: { temp_id: string; reason: string }[] = [];
   const verified: RawProblem[] = [];
   const gateStats = { pass: 0, fail: 0 };
   let previousFailureReasons = "";
 
-  // docs/content-gate.md §5's reject/regenerate loop, applied here too (not
-  // just the live hint/retry surface in lib/hintRetry.ts): a single one-shot
-  // request silently under-fills the batch whenever the gate's pass rate
-  // dips for a subtopic, which on the session bank-fill path (lib/session.ts)
-  // means the child gets served fewer problems than the parent's configured
-  // session length with no signal that anything went wrong.
   for (let attempt = 1; attempt <= maxAttempts && verified.length < batchSize; attempt++) {
     const remaining = batchSize - verified.length;
     const requestSize = Math.ceil(remaining * 1.3);

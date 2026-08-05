@@ -285,63 +285,74 @@ export async function generateAndSaveBatch(
   const config = chapter.config as unknown as ChapterConfig;
 
   const template = loadPromptTemplate("generate-batch.md");
-  const requestSize = Math.ceil(batchSize * 1.3);
-
-  const system = template.system;
-  const user = fillTemplate(template.user, {
-    batch_size: String(requestSize),
-    batch_spec_json: JSON.stringify(batchSpec),
-    chapter_config_json: JSON.stringify(config),
-    student_state_json: JSON.stringify(studentState),
-  });
-
-  const response = await anthropic.messages.create({
-    model: GENERATION_MODEL,
-    max_tokens: 8000,
-    temperature: 0.7,
-    system,
-    messages: [{ role: "user", content: user }],
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text content in generation response");
-  }
-
-  const rawProblems = parseModelJsonArray(textBlock.text);
+  const maxAttempts = 3;
 
   const failures: { temp_id: string; reason: string }[] = [];
   const verified: RawProblem[] = [];
   const gateStats = { pass: 0, fail: 0 };
+  let previousFailureReasons = "";
 
-  // Behavior unchanged from before the content gate (docs/content-gate.md):
-  // over-request `requestSize` and discard whatever fails, no per-slot
-  // regenerate-with-reasons loop here - that loop exists for the live
-  // hint/retry surfaces (lib/hintRetry.ts), not the nightly batch. What's
-  // new is the pass/fail *criteria* themselves (gateContent adds the
-  // moderation pass and the extra correctness checks on top of the old
-  // verifyProblem checks) and that every attempt is now audited.
-  for (const problem of rawProblems) {
-    const verdict = await gateContent({ kind: "problem", problem }, config);
-    await recordGenerationAudit({
-      kind: "problem",
-      pass: verdict.pass,
-      reasons: verdict.reasons,
-      attempt: 1,
-      model: GENERATION_MODEL,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-      content: JSON.stringify(problem),
+  // docs/content-gate.md §5's reject/regenerate loop, applied here too (not
+  // just the live hint/retry surface in lib/hintRetry.ts): a single one-shot
+  // request silently under-fills the batch whenever the gate's pass rate
+  // dips for a subtopic, which on the session bank-fill path (lib/session.ts)
+  // means the child gets served fewer problems than the parent's configured
+  // session length with no signal that anything went wrong.
+  for (let attempt = 1; attempt <= maxAttempts && verified.length < batchSize; attempt++) {
+    const remaining = batchSize - verified.length;
+    const requestSize = Math.ceil(remaining * 1.3);
+
+    const user = fillTemplate(template.user, {
+      batch_size: String(requestSize),
+      batch_spec_json: JSON.stringify(batchSpec),
+      chapter_config_json: JSON.stringify(config),
+      student_state_json: JSON.stringify(studentState),
+      previous_failure_reasons: previousFailureReasons,
     });
 
-    if (!verdict.pass) {
-      gateStats.fail++;
-      failures.push({ temp_id: problem.temp_id, reason: verdict.reasons.join("; ") });
-      continue;
+    const response = await anthropic.messages.create({
+      model: GENERATION_MODEL,
+      max_tokens: 8000,
+      temperature: 0.7,
+      system: template.system,
+      messages: [{ role: "user", content: user }],
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      throw new Error("No text content in generation response");
     }
-    gateStats.pass++;
-    verified.push(problem);
-    if (verified.length >= batchSize) break;
+
+    const rawProblems = parseModelJsonArray(textBlock.text);
+    const attemptFailureReasons: string[] = [];
+
+    for (const problem of rawProblems) {
+      const verdict = await gateContent({ kind: "problem", problem }, config);
+      await recordGenerationAudit({
+        kind: "problem",
+        pass: verdict.pass,
+        reasons: verdict.reasons,
+        attempt,
+        model: GENERATION_MODEL,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        content: JSON.stringify(problem),
+      });
+
+      if (!verdict.pass) {
+        gateStats.fail++;
+        failures.push({ temp_id: problem.temp_id, reason: verdict.reasons.join("; ") });
+        attemptFailureReasons.push(verdict.reasons.join("; "));
+        continue;
+      }
+      gateStats.pass++;
+      verified.push(problem);
+      if (verified.length >= batchSize) break;
+    }
+
+    if (verified.length < batchSize && attemptFailureReasons.length > 0) {
+      previousFailureReasons = `Previous attempt rejected ${attemptFailureReasons.length} problem(s) because: ${attemptFailureReasons.join("; ")}. Fix these issues and use different numbers.`;
+    }
   }
 
   for (const problem of verified) {

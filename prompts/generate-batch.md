@@ -123,3 +123,4 @@ Example shape:
 
 Do not repeat or trivially reskin any problem in recent_problem_statements.
 Respond with ONLY the JSON array.
+{{previous_failure_reasons}}
